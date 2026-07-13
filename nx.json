@@ -10,19 +10,20 @@
       "!{projectRoot}/vitest.config.ts",
       "!{projectRoot}/vitest.integration.config.ts"
     ],
-    "sharedGlobals": [
-      "{workspaceRoot}/tsconfig.base.json",
-      "{workspaceRoot}/eslint.config.mjs"
-    ]
+    "sharedGlobals": ["{workspaceRoot}/tsconfig.base.json", "{workspaceRoot}/eslint.config.mjs"]
   },
   "plugins": [
     {
       "plugin": "@nx/eslint/plugin",
-      "options": { "targetName": "lint" }
+      "options": {
+        "targetName": "lint"
+      }
     },
     {
       "plugin": "@nx/vite/plugin",
-      "options": { "testTargetName": "test" }
+      "options": {
+        "testTargetName": "test"
+      }
     }
   ],
   "targetDefaults": {
@@ -48,5 +49,6 @@
       "inputs": ["default", "{workspaceRoot}/eslint.config.mjs"],
       "cache": true
     }
-  }
+  },
+  "analytics": true
 }
