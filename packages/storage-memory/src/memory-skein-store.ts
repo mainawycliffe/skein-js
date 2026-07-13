@@ -16,6 +16,7 @@ import {
   type Item,
   type Run,
   type RunCreate,
+  type RunKwargs,
   type RunRepo,
   type RunStatus,
   type SearchItem,
@@ -68,6 +69,8 @@ export class MemorySkeinStore implements SkeinStore {
   readonly #assistants = new Map<string, Assistant>();
   readonly #threads = new Map<string, Thread>();
   readonly #runs = new Map<string, Run>();
+  // The opaque execution payload lives beside the run row (it is not part of the wire `Run`).
+  readonly #runKwargs = new Map<string, RunKwargs>();
   readonly #items = new Map<string, Item>();
 
   readonly assistants: AssistantRepo = {
@@ -120,6 +123,7 @@ export class MemorySkeinStore implements SkeinStore {
         metadata: patch.metadata ?? existing.metadata,
         status: patch.status ?? existing.status,
         values: patch.values ?? existing.values,
+        interrupts: patch.interrupts ?? existing.interrupts,
         updated_at: at,
         state_updated_at: patch.values !== undefined ? at : existing.state_updated_at,
       };
@@ -127,9 +131,12 @@ export class MemorySkeinStore implements SkeinStore {
     },
     delete: async (threadId) => {
       this.#threads.delete(threadId);
-      // Cascade: a deleted thread's runs go with it.
+      // Cascade: a deleted thread's runs (and their kwargs) go with it.
       for (const [runId, run] of this.#runs) {
-        if (run.thread_id === threadId) this.#runs.delete(runId);
+        if (run.thread_id === threadId) {
+          this.#runs.delete(runId);
+          this.#runKwargs.delete(runId);
+        }
       }
     },
   };
@@ -150,7 +157,9 @@ export class MemorySkeinStore implements SkeinStore {
         metadata: input.metadata ?? {},
         multitask_strategy: input.multitask_strategy ?? null,
       };
-      return write(this.#runs, run.run_id, run);
+      const stored = write(this.#runs, run.run_id, run);
+      if (input.kwargs) this.#runKwargs.set(run.run_id, clone(input.kwargs));
+      return stored;
     },
     setStatus: async (runId, status: RunStatus) => {
       const existing = this.#runs.get(runId);
@@ -159,6 +168,11 @@ export class MemorySkeinStore implements SkeinStore {
     },
     delete: async (runId) => {
       this.#runs.delete(runId);
+      this.#runKwargs.delete(runId);
+    },
+    getKwargs: async (runId) => {
+      const found = this.#runKwargs.get(runId);
+      return found ? clone(found) : null;
     },
     hasActiveRun: async (threadId) => {
       for (const run of this.#runs.values()) {

@@ -7,7 +7,7 @@ Skein separates two kinds of persistence, and it is important not to conflate th
    `PostgresSaver` in prod; `@langchain/langgraph-checkpoint-redis` and
    `-sqlite` are also available). See [reuse.md](./reuse.md).
 2. **Protocol resources** — assistants, thread metadata/status, run rows, and long-term
-   store items. These are the gap OSS keeps *in memory*, so Skein owns them behind a single
+   store items. These are the gap OSS keeps _in memory_, so Skein owns them behind a single
    `SkeinStore` interface with durable drivers.
 
 ## `SkeinStore` interface
@@ -19,7 +19,7 @@ interface SkeinStore {
   // assistants (derived from langgraph.json graphs, plus user-created)
   assistants: AssistantRepo;
 
-  // threads: metadata + status (idle | interrupted | errored | finished)
+  // threads: metadata + status (idle | busy | interrupted | error)
   threads: ThreadRepo;
 
   // runs: status + queue rows (pending | running | success | error | cancelled)
@@ -60,11 +60,11 @@ await checkpointer.setup(); // idempotent migrations for checkpoint tables
 
 ## Checkpointer selection
 
-| `langgraph.json` `checkpointer` | Skein uses |
-| --- | --- |
-| absent (dev / `skein dev`) | `MemorySaver` |
-| `"default"` | `PostgresSaver` (Postgres) |
-| `"custom"` | user-supplied checkpointer (later) |
+| `langgraph.json` `checkpointer` | Skein uses                         |
+| ------------------------------- | ---------------------------------- |
+| absent (dev / `skein dev`)      | `MemorySaver`                      |
+| `"default"`                     | `PostgresSaver` (Postgres)         |
+| `"custom"`                      | user-supplied checkpointer (later) |
 
 ## Why the split matters
 

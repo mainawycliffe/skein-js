@@ -20,7 +20,8 @@
       "@skein/nestjs": ["packages/server-nestjs/src/index.ts"],
       "@skein/storage-memory": ["packages/storage-memory/src/index.ts"],
       "@skein/storage-postgres": ["packages/storage-postgres/src/index.ts"],
-      "@skein/redis": ["packages/runtime-redis/src/index.ts"]
+      "@skein/redis": ["packages/runtime-redis/src/index.ts"],
+      "@skein/agent-protocol": ["packages/agent-protocol/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "dist"]

@@ -6,12 +6,12 @@ apps render agent output.
 
 ## The clients Skein must satisfy
 
-| Client | Package | How it talks to Skein |
-| --- | --- | --- |
-| Vanilla JS SDK | `@langchain/langgraph-sdk` | `client.threads.*`, `client.runs.stream()`, `client.runs.wait()` |
-| **React hook** | `@langchain/langgraph-sdk/react` | **`useStream({ apiUrl, assistantId })`** over SSE |
-| Agent Chat UI | (built on `useStream`) | Same SSE path |
-| LangGraph Studio | — | Agent Protocol HTTP |
+| Client           | Package                          | How it talks to Skein                                            |
+| ---------------- | -------------------------------- | ---------------------------------------------------------------- |
+| Vanilla JS SDK   | `@langchain/langgraph-sdk`       | `client.threads.*`, `client.runs.stream()`, `client.runs.wait()` |
+| **React hook**   | `@langchain/langgraph-sdk/react` | **`useStream({ apiUrl, assistantId })`** over SSE                |
+| Agent Chat UI    | (built on `useStream`)           | Same SSE path                                                    |
+| LangGraph Studio | —                                | Agent Protocol HTTP                                              |
 
 ## `useStream` against Skein
 
@@ -22,7 +22,7 @@ import { useStream } from "@langchain/langgraph-sdk/react";
 export function Chat() {
   const thread = useStream({
     apiUrl: process.env.NEXT_PUBLIC_SKEIN_URL!, // e.g. http://localhost:2024
-    assistantId: "agent",                        // a graph id from langgraph.json
+    assistantId: "agent", // a graph id from langgraph.json
   });
 
   return (
@@ -30,11 +30,7 @@ export function Chat() {
       {thread.messages.map((m) => (
         <div key={m.id}>{typeof m.content === "string" ? m.content : ""}</div>
       ))}
-      <button
-        onClick={() =>
-          thread.submit({ messages: [{ type: "human", content: "hello" }] })
-        }
-      >
+      <button onClick={() => thread.submit({ messages: [{ type: "human", content: "hello" }] })}>
         Send
       </button>
     </div>

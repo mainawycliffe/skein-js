@@ -43,13 +43,13 @@ Priority order (**bold = MVP**):
 
 ## Verification
 
-| Layer | How |
-| --- | --- |
-| **Unit** | vitest per package; storage drivers against a shared `SkeinStore` conformance suite; run-engine transitions; SSE frame mapping. |
-| **Conformance / e2e** | `examples/express-basic` exercised by the real `@langchain/langgraph-sdk` client (`threads.create`, `runs.stream`, `runs.wait`). If the official SDK is happy, the wire format is right. |
-| **Drop-in migration (headline)** | `examples/migrated-langgraph` with a real `langgraph.json` run via `skein dev` in place of `langgraph dev`, no other change. |
-| **React `useStream` (headline FE)** | `examples/react-usestream` streams a reply token-by-token from Skein. |
-| **Interop** | Agent Chat UI points at the local server; streamed conversation renders. |
-| **Postgres + Redis** | Conformance suite re-run against Postgres; cross-instance test — start a run on instance A, join its SSE stream from instance B via Redis. |
+| Layer                               | How                                                                                                                                                                                      |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Unit**                            | vitest per package; storage drivers against a shared `SkeinStore` conformance suite; run-engine transitions; SSE frame mapping.                                                          |
+| **Conformance / e2e**               | `examples/express-basic` exercised by the real `@langchain/langgraph-sdk` client (`threads.create`, `runs.stream`, `runs.wait`). If the official SDK is happy, the wire format is right. |
+| **Drop-in migration (headline)**    | `examples/migrated-langgraph` with a real `langgraph.json` run via `skein dev` in place of `langgraph dev`, no other change.                                                             |
+| **React `useStream` (headline FE)** | `examples/react-usestream` streams a reply token-by-token from Skein.                                                                                                                    |
+| **Interop**                         | Agent Chat UI points at the local server; streamed conversation renders.                                                                                                                 |
+| **Postgres + Redis**                | Conformance suite re-run against Postgres; cross-instance test — start a run on instance A, join its SSE stream from instance B via Redis.                                               |
 
 See the top-level [plan](../README.md) and each feature doc for detail.

@@ -89,6 +89,15 @@ export function runSkeinStoreConformance(label: string, makeStore: SkeinStoreFac
         expect(updated.values).toEqual({ messages: [] });
       });
 
+      it("mirrors pending interrupts onto the thread", async () => {
+        const store = await makeStore();
+        const { thread_id } = await store.threads.create();
+
+        const interrupts = { task1: [{ value: "approve?", when: "during" as const }] };
+        const updated = await store.threads.update(thread_id, { interrupts });
+        expect(updated.interrupts).toEqual(interrupts);
+      });
+
       it("rejects updating an unknown thread", async () => {
         const store = await makeStore();
         await expect(store.threads.update("nope", { status: "idle" })).rejects.toThrow();
@@ -157,13 +166,34 @@ export function runSkeinStoreConformance(label: string, makeStore: SkeinStoreFac
         expect(await store.runs.hasActiveRun(thread_id)).toBe(false);
       });
 
-      it("counts an interrupted run as still active (it owns the thread until resumed)", async () => {
+      it("does not count an interrupted run as active (resume is a fresh run on the thread)", async () => {
+        // Matches @langchain/langgraph-api: inflight = pending | running only. An interrupted run
+        // has handed the thread to a human, so it is terminal and must not block the resume run.
         const store = await makeStore();
         const thread_id = await seedThread(store);
         const run = await store.runs.create({ thread_id, assistant_id: "a" });
 
         await store.runs.setStatus(run.run_id, "interrupted");
-        expect(await store.runs.hasActiveRun(thread_id)).toBe(true);
+        expect(await store.runs.hasActiveRun(thread_id)).toBe(false);
+      });
+
+      it("round-trips a run's opaque kwargs and returns null for an unknown run", async () => {
+        const store = await makeStore();
+        const thread_id = await seedThread(store);
+        const run = await store.runs.create({
+          thread_id,
+          assistant_id: "a",
+          kwargs: { input: { messages: ["hi"] }, stream_mode: "values" },
+        });
+
+        expect(await store.runs.getKwargs(run.run_id)).toEqual({
+          input: { messages: ["hi"] },
+          stream_mode: "values",
+        });
+        expect(await store.runs.getKwargs("unknown")).toBeNull();
+
+        const noKwargs = await store.runs.create({ thread_id, assistant_id: "a" });
+        expect(await store.runs.getKwargs(noKwargs.run_id)).toBeNull();
       });
 
       it("deletes a run", async () => {

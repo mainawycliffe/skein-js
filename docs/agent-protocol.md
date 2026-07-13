@@ -10,13 +10,13 @@ instead of hand-writing (or regenerating) a parallel set. See [reuse.md](./reuse
 
 ## Core resources
 
-| Resource | Description |
-| --- | --- |
-| **Assistants / agents** | A served graph plus its introspectable input/output/state/config schemas. |
-| **Threads** | Multi-turn conversation containers with persistent state and history; track status (`idle`, `interrupted`, `errored`, `finished`). |
-| **Runs** | Atomic executions of a graph — stateless (ephemeral), streaming, or background. |
-| **Store** | Long-term memory organized by namespace + key, with CRUD and (semantic) search. |
-| **Messages** | First-class primitives aligned with OpenAI/Anthropic formats. |
+| Resource                | Description                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Assistants / agents** | A served graph plus its introspectable input/output/state/config schemas.                                                    |
+| **Threads**             | Multi-turn conversation containers with persistent state and history; track status (`idle`, `busy`, `interrupted`, `error`). |
+| **Runs**                | Atomic executions of a graph — stateless (ephemeral), streaming, or background.                                              |
+| **Store**               | Long-term memory organized by namespace + key, with CRUD and (semantic) search.                                              |
+| **Messages**            | First-class primitives aligned with OpenAI/Anthropic formats.                                                                |
 
 ## Endpoint inventory
 
@@ -24,60 +24,60 @@ Priority for v1 is marked **✅ MVP**. Deferred items are noted.
 
 ### Assistants / agents
 
-| Method | Path | MVP |
-| --- | --- | --- |
-| `POST` | `/agents/search` | |
-| `GET` | `/agents/{agent_id}` | |
-| `GET` | `/agents/{agent_id}/schemas` | ✅ |
+| Method | Path                         | MVP |
+| ------ | ---------------------------- | --- |
+| `POST` | `/agents/search`             |     |
+| `GET`  | `/agents/{agent_id}`         |     |
+| `GET`  | `/agents/{agent_id}/schemas` | ✅  |
 
 ### Threads
 
-| Method | Path | MVP |
-| --- | --- | --- |
-| `POST` | `/threads` | ✅ |
-| `GET` | `/threads/{thread_id}` | ✅ |
-| `POST` | `/threads/search` | |
-| `GET` | `/threads/{thread_id}/history` | |
-| `PATCH` | `/threads/{thread_id}` | |
-| `POST` | `/threads/{thread_id}/copy` | |
-| `DELETE` | `/threads/{thread_id}` | ✅ |
+| Method   | Path                           | MVP |
+| -------- | ------------------------------ | --- |
+| `POST`   | `/threads`                     | ✅  |
+| `GET`    | `/threads/{thread_id}`         | ✅  |
+| `POST`   | `/threads/search`              |     |
+| `GET`    | `/threads/{thread_id}/history` |     |
+| `PATCH`  | `/threads/{thread_id}`         |     |
+| `POST`   | `/threads/{thread_id}/copy`    |     |
+| `DELETE` | `/threads/{thread_id}`         | ✅  |
 
 ### Runs — stateless / ephemeral
 
-| Method | Path | MVP |
-| --- | --- | --- |
-| `POST` | `/runs/wait` | ✅ |
-| `POST` | `/runs/stream` | ✅ |
+| Method | Path           | MVP |
+| ------ | -------------- | --- |
+| `POST` | `/runs/wait`   | ✅  |
+| `POST` | `/runs/stream` | ✅  |
 
 ### Runs — background (thread-scoped)
 
-| Method | Path | MVP |
-| --- | --- | --- |
-| `POST` | `/threads/{thread_id}/runs` | ✅ |
-| `GET` | `/threads/{thread_id}/runs` | |
-| `GET` | `/runs/{run_id}` | ✅ |
-| `GET` | `/runs/{run_id}/wait` | |
-| `GET` | `/runs/{run_id}/stream` (join) | ✅ |
-| `POST` | `/runs/{run_id}/cancel` | |
-| `DELETE` | `/runs/{run_id}` | |
+| Method   | Path                           | MVP |
+| -------- | ------------------------------ | --- |
+| `POST`   | `/threads/{thread_id}/runs`    | ✅  |
+| `GET`    | `/threads/{thread_id}/runs`    |     |
+| `GET`    | `/runs/{run_id}`               | ✅  |
+| `GET`    | `/runs/{run_id}/wait`          |     |
+| `GET`    | `/runs/{run_id}/stream` (join) | ✅  |
+| `POST`   | `/runs/{run_id}/cancel`        |     |
+| `DELETE` | `/runs/{run_id}`               |     |
 
 ### Store (long-term memory)
 
-| Method | Path | MVP |
-| --- | --- | --- |
-| `PUT` | `/store/items` | |
-| `GET` | `/store/items` | |
-| `DELETE` | `/store/items` | |
-| `POST` | `/store/items/search` (pgvector semantic) | ✅ |
-| `POST` | `/store/namespaces` | |
+| Method   | Path                                      | MVP |
+| -------- | ----------------------------------------- | --- |
+| `PUT`    | `/store/items`                            |     |
+| `GET`    | `/store/items`                            |     |
+| `DELETE` | `/store/items`                            |     |
+| `POST`   | `/store/items/search` (pgvector semantic) | ✅  |
+| `POST`   | `/store/namespaces`                       |     |
 
 ### Thread streaming (SSE)
 
-| Method | Path | MVP |
-| --- | --- | --- |
-| `POST` | `/threads/{thread_id}/stream` | ✅ |
-| `GET` | `/threads/{thread_id}/stream` | ✅ |
-| `POST` | `/threads/{thread_id}/commands` | ✅ |
+| Method | Path                            | MVP |
+| ------ | ------------------------------- | --- |
+| `POST` | `/threads/{thread_id}/stream`   | ✅  |
+| `GET`  | `/threads/{thread_id}/stream`   | ✅  |
+| `POST` | `/threads/{thread_id}/commands` | ✅  |
 
 > The protocol also describes a WebSocket upgrade for bidirectional streaming. That is
 > **post-MVP** — SSE covers the full client UX (see [streaming.md](./streaming.md)).

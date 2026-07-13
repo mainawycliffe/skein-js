@@ -1,7 +1,7 @@
 # Code practices
 
 > **Goal:** code that is kind to your future self — readable, simple, and neat. When in
-> doubt, choose the version that is easier to *read*, not the one that is clever to write.
+> doubt, choose the version that is easier to _read_, not the one that is clever to write.
 
 These are conventions, not dogma. They exist so the codebase stays small and legible while
 we lean on [LangGraph OSS](./reuse.md) for the heavy lifting.
@@ -12,13 +12,16 @@ we lean on [LangGraph OSS](./reuse.md) for the heavy lifting.
   good name removes the need for a comment.
 - **Small functions, one job each.** If you need "and" to describe a function, split it.
 - **Shallow nesting.** Prefer early returns / guard clauses over `else` ladders.
-- **Comments explain *why*, not *what*.** The code says what. Reserve comments for intent,
+- **Comments explain _why_, not _what_.** The code says what. Reserve comments for intent,
   trade-offs, and links to spec/issues.
 - **Match the surrounding style.** Consistency beats personal preference in a shared file.
 
 ```ts
 // ❌ clever, dense
-const t = xs.filter(x => x.s === "p").map(x => x.id).find(id => q.has(id));
+const t = xs
+  .filter((x) => x.s === "p")
+  .map((x) => x.id)
+  .find((id) => q.has(id));
 
 // ✅ plain, obvious
 const pendingRuns = runs.filter((run) => run.status === "pending");
@@ -84,8 +87,8 @@ has to argue them in review.
 - **TypeScript strict** across the workspace (`tsconfig.base.json`), `noUncheckedIndexedAccess` on.
 - **ESM only** (`"type": "module"`); use `import`/`export`, never `require`.
 - **Named exports only.** No default exports in `packages/*` (enforced by `import/no-default-export`).
-  *(Exception: the `examples/react-usestream` Next.js app, where the framework requires default
-  exports for pages/layouts — scoped off in ESLint config.)*
+  _(Exception: the `examples/react-usestream` Next.js app, where the framework requires default
+  exports for pages/layouts — scoped off in ESLint config.)_
 - **One public surface per package:** everything consumers use is re-exported from `src/index.ts`.
 
 ### Files & naming
@@ -123,7 +126,7 @@ has to argue them in review.
 
 - **[Conventional Commits](https://www.conventionalcommits.org):** `feat:`, `fix:`, `docs:`,
   `refactor:`, `test:`, `chore:`, scoped where useful (`feat(core): …`).
-- **Small, focused commits/PRs** with a clear message: *what changed and why*.
+- **Small, focused commits/PRs** with a clear message: _what changed and why_.
 
 ## 5. Testing
 
@@ -134,7 +137,7 @@ Full strategy in **[testing.md](./testing.md)**. In short:
 - **Unit tests** for pure logic (run-engine transitions, SSE mapping, config parsing).
 - **[Testcontainers](https://testcontainers.com)** integration tests for anything touching
   real infrastructure (`storage-postgres`, `redis`) — a real Postgres/Redis per suite.
-- **Shared `SkeinStore` conformance suite** run against *every* storage driver, so memory and
+- **Shared `SkeinStore` conformance suite** run against _every_ storage driver, so memory and
   Postgres are held to the identical contract.
 
 ## 6. A checklist before you push

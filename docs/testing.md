@@ -9,11 +9,11 @@ Runner: **[Vitest](https://vitest.dev)** across the whole workspace. Integration
 
 ## The three layers
 
-| Layer | Runs against | Where | Speed |
-| --- | --- | --- | --- |
-| **Unit** | Pure functions, injected fakes | co-located `*.test.ts` in every package | ms |
+| Layer                       | Runs against                               | Where                                                  | Speed   |
+| --------------------------- | ------------------------------------------ | ------------------------------------------------------ | ------- |
+| **Unit**                    | Pure functions, injected fakes             | co-located `*.test.ts` in every package                | ms      |
 | **Integration (container)** | A **real** Postgres / Redis in a container | `*.integration.test.ts` in `storage-postgres`, `redis` | seconds |
-| **Conformance** | Every storage driver, one shared suite | `@skein/test-support` → run in each driver package | mixed |
+| **Conformance**             | Every storage driver, one shared suite     | `@skein/test-support` → run in each driver package     | mixed   |
 
 ### 1. Unit tests — the default
 
@@ -32,7 +32,8 @@ describe("toSSEFrame", () => {
 });
 ```
 
-Target coverage for `@skein/core` logic (run engine, SSE mapping, config resolution) is high
+Target coverage for `@skein/agent-protocol` logic (run engine, SSE mapping) and `@skein/config`
+resolution is high
 — it's pure and cheap to cover. We do **not** chase a coverage number on glue/adapters.
 
 ### 2. Integration tests — real containers, where it makes sense
@@ -50,11 +51,14 @@ describe("PostgresSkeinStore", () => {
   let store: PostgresSkeinStore;
 
   beforeAll(async () => {
-    pg = await startPostgres();               // Testcontainers: real Postgres + pgvector
+    pg = await startPostgres(); // Testcontainers: real Postgres + pgvector
     store = await PostgresSkeinStore.connect(pg.url);
     await store.migrate();
   });
-  afterAll(async () => { await store.close(); await pg.stop(); });
+  afterAll(async () => {
+    await store.close();
+    await pg.stop();
+  });
 
   it("persists a thread and reads it back", async () => {
     const created = await store.threads.create({ metadata: { user: "a" } });
@@ -65,6 +69,7 @@ describe("PostgresSkeinStore", () => {
 ```
 
 Guidelines:
+
 - Container tests are **opt-in by file suffix** (`*.integration.test.ts`) so the fast unit
   loop (`pnpm test`) stays quick; CI runs both.
 - One container **per suite** (`beforeAll`), reused across `it`s; always tear down in `afterAll`.
@@ -130,10 +135,10 @@ Tests run **through Nx**, not bare Vitest:
 
 ## Commands
 
-| Command | Does |
-| --- | --- |
-| `pnpm test` | `nx run-many -t test` — unit + conformance (memory), fast, no Docker. |
-| `pnpm test:integration` | `nx run-many -t test-integration` — `*.integration.test.ts`, needs Docker. |
-| `pnpm test:coverage` | `nx run-many -t test --coverage` (`@vitest/coverage-v8`). |
-| `nx test <project>` / `nx test-integration <project>` | A single project. |
-| `pnpm affected` | Only projects affected by your changes. |
+| Command                                               | Does                                                                       |
+| ----------------------------------------------------- | -------------------------------------------------------------------------- |
+| `pnpm test`                                           | `nx run-many -t test` — unit + conformance (memory), fast, no Docker.      |
+| `pnpm test:integration`                               | `nx run-many -t test-integration` — `*.integration.test.ts`, needs Docker. |
+| `pnpm test:coverage`                                  | `nx run-many -t test --coverage` (`@vitest/coverage-v8`).                  |
+| `nx test <project>` / `nx test-integration <project>` | A single project.                                                          |
+| `pnpm affected`                                       | Only projects affected by your changes.                                    |

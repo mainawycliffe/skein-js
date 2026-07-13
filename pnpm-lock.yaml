@@ -110,6 +110,25 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/agent-protocol:
+    dependencies:
+      '@langchain/langgraph':
+        specifier: ^1.4.0
+        version: 1.4.7(@langchain/core@1.2.2(ws@8.21.0))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(zod@3.25.76)
+      '@langchain/langgraph-sdk':
+        specifier: ^1.9.0
+        version: 1.9.25(@langchain/core@1.2.2(ws@8.21.0))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@skein/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@skein/storage-memory':
+        specifier: workspace:*
+        version: link:../storage-memory
+
   packages/cli:
     dependencies:
       '@commander-js/extra-typings':

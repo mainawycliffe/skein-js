@@ -17,4 +17,16 @@
   source of truth — run `pnpm lint` / `pnpm format` rather than hand-formatting.
 - **Testing:** Vitest + Testcontainers, shared conformance suite — [docs/testing.md](./docs/testing.md).
 
+## Hard rules
+
+These are non-negotiable in this repo (they extend, and never restate, AGENTS.md):
+
+- **Names must reveal purpose.** A reader knows what a symbol does from its name alone. No vague
+  names (`data`, `info`, `util`, `handle`, `manager`, `process`, `doIt`) and no unexplained
+  abbreviations. Functions read verb-first (`startRun`, `resolveGraph`, `mirrorThreadState`); values
+  are nouns (`activeRun`, `graphResolver`). Prefer a longer honest name over a short opaque one.
+- **Scaffold libraries with the Nx CLI**, never by hand: `npx nx g @nx/js:lib <name>
+--directory=packages/<dir> --importPath=@skein/<name>`, then align the generated files to the
+  `@skein/core` template. Do not create a package tree file-by-file.
+
 Everything else lives in [AGENTS.md](./AGENTS.md) and [`docs/`](./docs/index.md).

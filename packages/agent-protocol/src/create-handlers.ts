@@ -1,0 +1,245 @@
+// The transport-neutral handler table. Each handler validates the raw request, calls the typed
+// service, and returns a `ProtocolResponse` a framework adapter serializes. Routes/shapes follow
+// the `@langchain/langgraph-sdk` client (the conformance oracle): /assistants, /threads, /runs,
+// /store. SSE responses carry a pre-serialized event iterable (data frames + a synthesized
+// terminal event read from the run's final status).
+
+import type { RunFrame } from "@skein/core";
+
+import type { CreateRunInput } from "./runs/run-service.js";
+import type { ProtocolService } from "./service.js";
+import { parseAfterSeq, toSseEvents } from "./sse/sse.js";
+import type { CommandInput, ThreadStreamInput } from "./threads/thread-stream-service.js";
+import { parse, requireParam } from "./validation/parse.js";
+import {
+  assistantSearchSchema,
+  commandBodySchema,
+  listNamespacesSchema,
+  runCreateSchema,
+  storePutSchema,
+  storeSearchSchema,
+  threadCreateSchema,
+  threadPatchSchema,
+  threadStreamSchema,
+} from "./validation/schemas.js";
+
+/** A normalized request an adapter maps its framework request onto. */
+export interface ProtocolRequest {
+  params: Record<string, string>;
+  query: Record<string, string | string[] | undefined>;
+  body: unknown;
+  headers: Record<string, string | undefined>;
+}
+
+/** A normalized response an adapter serializes back onto its framework response. */
+export type ProtocolResponse =
+  | { kind: "json"; status: number; body: unknown }
+  | { kind: "empty"; status: number }
+  | { kind: "sse"; status: number; events: AsyncIterable<string> };
+
+export type ProtocolHandler = (req: ProtocolRequest) => Promise<ProtocolResponse>;
+
+export interface ProtocolHandlers {
+  // assistants
+  getAssistant: ProtocolHandler;
+  searchAssistants: ProtocolHandler;
+  getAssistantSchemas: ProtocolHandler;
+  // threads
+  createThread: ProtocolHandler;
+  getThread: ProtocolHandler;
+  listThreads: ProtocolHandler;
+  patchThread: ProtocolHandler;
+  deleteThread: ProtocolHandler;
+  getThreadHistory: ProtocolHandler;
+  // runs
+  createWaitRun: ProtocolHandler;
+  createStreamRun: ProtocolHandler;
+  createBackgroundRun: ProtocolHandler;
+  getRun: ProtocolHandler;
+  listThreadRuns: ProtocolHandler;
+  joinRunStream: ProtocolHandler;
+  cancelRun: ProtocolHandler;
+  deleteRun: ProtocolHandler;
+  // thread streaming / commands
+  postThreadStream: ProtocolHandler;
+  getThreadStream: ProtocolHandler;
+  postThreadCommands: ProtocolHandler;
+  // store
+  putStoreItem: ProtocolHandler;
+  getStoreItem: ProtocolHandler;
+  deleteStoreItem: ProtocolHandler;
+  searchStoreItems: ProtocolHandler;
+  listStoreNamespaces: ProtocolHandler;
+}
+
+const json = (body: unknown, status = 200): ProtocolResponse => ({ kind: "json", status, body });
+const empty = (status = 204): ProtocolResponse => ({ kind: "empty", status });
+
+/** A single query value: the first entry if repeated, else the string, else undefined. */
+function queryValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/** Parse a namespace query param: repeated values, or a single dot-separated string. */
+function namespaceFromQuery(value: string | string[] | undefined): string[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.length > 0) return value.split(".");
+  return [];
+}
+
+function positiveIntQuery(value: string | string[] | undefined): number | undefined {
+  const raw = queryValue(value);
+  if (raw === undefined) return undefined;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+export function createProtocolHandlers(service: ProtocolService): ProtocolHandlers {
+  // Build an SSE response whose terminal event reflects the run's final status once frames end.
+  const sse = (runId: string, frames: AsyncIterable<RunFrame>): ProtocolResponse => ({
+    kind: "sse",
+    status: 200,
+    events: toSseEvents(frames, () => service.runs.finalStatus(runId)),
+  });
+
+  const afterSeqFrom = (req: ProtocolRequest): number =>
+    parseAfterSeq(req.headers["last-event-id"]);
+
+  return {
+    // --- assistants ---------------------------------------------------------------------------
+    getAssistant: async (req) =>
+      json(await service.assistants.get(requireParam(req.params, "assistant_id"))),
+
+    searchAssistants: async (req) =>
+      json(await service.assistants.search(parse(assistantSearchSchema, req.body ?? {}))),
+
+    getAssistantSchemas: async (req) =>
+      json(await service.assistants.schemas(requireParam(req.params, "assistant_id"))),
+
+    // --- threads ------------------------------------------------------------------------------
+    createThread: async (req) =>
+      json(await service.threads.create(parse(threadCreateSchema, req.body ?? {}))),
+
+    getThread: async (req) =>
+      json(await service.threads.get(requireParam(req.params, "thread_id"))),
+
+    listThreads: async () => json(await service.threads.list()),
+
+    patchThread: async (req) =>
+      json(
+        await service.threads.patch(
+          requireParam(req.params, "thread_id"),
+          parse(threadPatchSchema, req.body ?? {}),
+        ),
+      ),
+
+    deleteThread: async (req) => {
+      await service.threads.delete(requireParam(req.params, "thread_id"));
+      return empty();
+    },
+
+    getThreadHistory: async (req) => {
+      const limit = positiveIntQuery(req.query["limit"]);
+      const options = limit === undefined ? undefined : { limit };
+      return json(await service.threads.history(requireParam(req.params, "thread_id"), options));
+    },
+
+    // --- runs ---------------------------------------------------------------------------------
+    createWaitRun: async (req) =>
+      json(await service.runs.createWait(parse(runCreateSchema, req.body) as CreateRunInput)),
+
+    createStreamRun: async (req) => {
+      const started = await service.runs.createStream(
+        parse(runCreateSchema, req.body) as CreateRunInput,
+      );
+      return sse(started.runId, started.frames);
+    },
+
+    createBackgroundRun: async (req) =>
+      json(
+        await service.runs.createBackground(
+          requireParam(req.params, "thread_id"),
+          parse(runCreateSchema, req.body) as CreateRunInput,
+        ),
+      ),
+
+    getRun: async (req) => json(await service.runs.get(requireParam(req.params, "run_id"))),
+
+    listThreadRuns: async (req) =>
+      json(await service.runs.listByThread(requireParam(req.params, "thread_id"))),
+
+    joinRunStream: async (req) => {
+      const runId = requireParam(req.params, "run_id");
+      const frames = await service.runs.join(runId, afterSeqFrom(req));
+      return sse(runId, frames);
+    },
+
+    cancelRun: async (req) => json(await service.runs.cancel(requireParam(req.params, "run_id"))),
+
+    deleteRun: async (req) => {
+      await service.runs.delete(requireParam(req.params, "run_id"));
+      return empty();
+    },
+
+    // --- thread streaming / commands ----------------------------------------------------------
+    postThreadStream: async (req) => {
+      const started = await service.threadStream.stream(
+        requireParam(req.params, "thread_id"),
+        parse(threadStreamSchema, req.body) as ThreadStreamInput,
+      );
+      return sse(started.runId, started.frames);
+    },
+
+    getThreadStream: async (req) => {
+      const started = await service.threadStream.joinStream(
+        requireParam(req.params, "thread_id"),
+        afterSeqFrom(req),
+      );
+      return sse(started.runId, started.frames);
+    },
+
+    postThreadCommands: async (req) => {
+      const started = await service.threadStream.command(
+        requireParam(req.params, "thread_id"),
+        parse(commandBodySchema, req.body ?? {}) as CommandInput,
+      );
+      return sse(started.runId, started.frames);
+    },
+
+    // --- store --------------------------------------------------------------------------------
+    putStoreItem: async (req) => {
+      const body = parse(storePutSchema, req.body);
+      return json(await service.store.put(body.namespace, body.key, body.value));
+    },
+
+    getStoreItem: async (req) => {
+      const namespace = namespaceFromQuery(req.query["namespace"]);
+      const key = queryValue(req.query["key"]) ?? "";
+      return json(await service.store.get(namespace, key));
+    },
+
+    deleteStoreItem: async (req) => {
+      const namespace = namespaceFromQuery(req.query["namespace"]);
+      const key = queryValue(req.query["key"]) ?? "";
+      await service.store.delete(namespace, key);
+      return empty();
+    },
+
+    searchStoreItems: async (req) => {
+      const body = parse(storeSearchSchema, req.body ?? {});
+      return json(
+        await service.store.search({
+          prefix: body.namespace_prefix,
+          query: body.query,
+          limit: body.limit,
+          offset: body.offset,
+        }),
+      );
+    },
+
+    listStoreNamespaces: async (req) => {
+      const body = parse(listNamespacesSchema, req.body ?? {});
+      return json(await service.store.listNamespaces(body.prefix));
+    },
+  };
+}

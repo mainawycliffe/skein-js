@@ -22,17 +22,34 @@ interface Channel {
   closed: boolean;
   /** Resolvers woken whenever a frame is published or the run is closed. */
   waiters: Array<() => void>;
-  /** Live subscriber count, so a fully-drained closed run can be evicted. */
+  /** Live subscriber count, so a channel with active readers is never evicted. */
   subscribers: number;
 }
+
+/** How many finished (closed) runs' frame buffers to retain for late-join replay, by default. */
+const DEFAULT_MAX_RETAINED_RUNS = 1000;
 
 /**
  * In-memory fan-out of run frames. Each frame is buffered, so a subscriber that joins late (or
  * reconnects with an `afterSeq`) replays what it missed and then live-tails until the run
  * closes. Buffering also means publish never blocks on a slow consumer.
+ *
+ * A closed run's frame buffer is retained for late-join replay, but only for the most recent
+ * `maxRetainedRuns` closed runs (LRU). Beyond that the buffer is dropped and the channel is kept as
+ * a lightweight *closed tombstone* — so a long-lived process can't grow its frame memory without
+ * bound, yet a late join to an evicted run still completes at once (empty) instead of hanging.
+ * Active (unclosed) runs and runs with live subscribers keep their frames. `@skein/redis` bounds
+ * this with a real TTL in production.
  */
 export class MemoryRunEventBus implements RunEventBus {
   readonly #channels = new Map<string, Channel>();
+  /** Closed runs in close order (oldest first), for LRU eviction of retained buffers. */
+  readonly #closedOrder: string[] = [];
+  readonly #maxRetainedRuns: number;
+
+  constructor(options: { maxRetainedRuns?: number } = {}) {
+    this.#maxRetainedRuns = options.maxRetainedRuns ?? DEFAULT_MAX_RETAINED_RUNS;
+  }
 
   #channel(runId: string): Channel {
     let channel = this.#channels.get(runId);
@@ -48,6 +65,26 @@ export class MemoryRunEventBus implements RunEventBus {
     for (const resolve of waiters) resolve();
   }
 
+  // Free the frame buffers of the oldest retained closed runs beyond the cap, leaving a closed
+  // tombstone so a late join replays nothing and completes at once (rather than hanging on a
+  // recreated open channel). A channel with live subscribers is mid-replay: keep its frames and
+  // re-queue it so it's reconsidered after the reader detaches.
+  #evictClosedBeyondCap(): void {
+    let scanned = 0;
+    while (this.#closedOrder.length > this.#maxRetainedRuns && scanned < this.#closedOrder.length) {
+      scanned += 1;
+      const runId = this.#closedOrder.shift();
+      if (runId === undefined) break;
+      const channel = this.#channels.get(runId);
+      if (!channel) continue;
+      if (channel.subscribers > 0) {
+        this.#closedOrder.push(runId);
+        continue;
+      }
+      channel.frames = []; // drop the heavy buffer; the closed tombstone stays for hang-free joins
+    }
+  }
+
   async publish(runId: string, frame: RunFrame): Promise<void> {
     const channel = this.#channel(runId);
     channel.frames.push(frame);
@@ -58,6 +95,8 @@ export class MemoryRunEventBus implements RunEventBus {
     const channel = this.#channel(runId);
     channel.closed = true;
     this.#wake(channel);
+    this.#closedOrder.push(runId);
+    this.#evictClosedBeyondCap();
   }
 
   async *subscribe(runId: string, afterSeq = 0): AsyncIterable<RunFrame> {
@@ -75,11 +114,7 @@ export class MemoryRunEventBus implements RunEventBus {
         await new Promise<void>((resolve) => channel.waiters.push(resolve));
       }
     } finally {
-      // Once a closed run's last subscriber detaches, drop the channel + its buffered frames.
-      // (A never-subscribed background run keeps its frames for a later join; the run engine
-      // applies retention there. We never evict in close(), so mid-run replay is preserved.)
       channel.subscribers -= 1;
-      if (channel.closed && channel.subscribers === 0) this.#channels.delete(runId);
     }
   }
 }

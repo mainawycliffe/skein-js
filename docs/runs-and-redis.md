@@ -5,25 +5,25 @@ This doc covers how Skein executes runs and how it scales horizontally — model
 
 > **Reuse note:** `@skein/redis` is the run **queue + pub/sub** — the piece LangGraph OSS
 > does not provide (the open [`@langchain/langgraph-api`](https://www.npmjs.com/package/@langchain/langgraph-api)
-> server runs runs in-process, in-memory). It is *not* a checkpointer; for Redis-backed
+> server runs runs in-process, in-memory). It is _not_ a checkpointer; for Redis-backed
 > checkpoints use `@langchain/langgraph-checkpoint-redis`. See [reuse.md](./reuse.md).
 
 ## Run modes
 
 The [Agent Protocol](./agent-protocol.md) defines three ways to execute a graph:
 
-| Mode | Endpoint | Behavior |
-| --- | --- | --- |
-| **wait** | `POST /runs/wait`, `GET /runs/{id}/wait` | Run to completion, return final output. |
-| **stream** | `POST /runs/stream`, `GET /runs/{id}/stream` | [SSE](./streaming.md) as output is produced. |
-| **background** | `POST /threads/{id}/runs` | Enqueue; poll (`GET /runs/{id}`) or join its stream later. |
+| Mode           | Endpoint                                     | Behavior                                                   |
+| -------------- | -------------------------------------------- | ---------------------------------------------------------- |
+| **wait**       | `POST /runs/wait`, `GET /runs/{id}/wait`     | Run to completion, return final output.                    |
+| **stream**     | `POST /runs/stream`, `GET /runs/{id}/stream` | [SSE](./streaming.md) as output is produced.               |
+| **background** | `POST /threads/{id}/runs`                    | Enqueue; poll (`GET /runs/{id}`) or join its stream later. |
 
 A **concurrency guard** prevents two active runs on the same thread (the protocol's
 concurrency-control requirement).
 
 ## Run engine
 
-`@skein/core` owns a run engine that:
+`@skein/agent-protocol` owns a run engine that:
 
 1. Resolves the target graph via [`@skein/config`](./langgraph-cli-compat.md).
 2. Persists a run row through [`SkeinStore`](./storage.md) (`pending → running → success/error`).

@@ -14,7 +14,7 @@ so Skein doesn't rebuild them. It reuses the LangGraph runtime, checkpointers, `
 parser, schemas, and SDK/types, and adds only the durable-production, multi-framework, and
 drop-in-CLI layer that OSS lacks. See [docs/reuse.md](./docs/reuse.md).
 
-> **Skein** *(noun)* — a coiled length of thread. The Agent Protocol's first-class
+> **Skein** _(noun)_ — a coiled length of thread. The Agent Protocol's first-class
 > **threads**, and the strands of a graph.
 
 ## The drop-in promise
@@ -39,33 +39,38 @@ Your existing clients keep working against `localhost` with only a URL change:
 
 ## Why Skein
 
-| | LangGraph Platform | aegra | **Skein** |
-| --- | --- | --- | --- |
-| Self-hosted | ❌ hosted | ✅ | ✅ |
-| Language | — | Python / FastAPI | **TypeScript / Node** |
-| HTTP framework | — | FastAPI | **Express / Fastify / NestJS** |
-| Agent Protocol | ✅ | ✅ | ✅ |
-| Drop-in for LangGraph CLI | — | partial | **✅ (`skein dev|up|build`)** |
+|                           | LangGraph Platform | aegra            | **Skein**                             |
+| ------------------------- | ------------------ | ---------------- | ------------------------------------- |
+| Self-hosted               | ❌ hosted          | ✅               | ✅                                    |
+| Language                  | —                  | Python / FastAPI | **TypeScript / Node**                 |
+| HTTP framework            | —                  | FastAPI          | **Express / Fastify / NestJS**        |
+| Agent Protocol            | ✅                 | ✅               | ✅                                    |
+| Drop-in for LangGraph CLI | —                  | partial          | **✅ (`skein dev` / `up` / `build`)** |
 
 ## Status
 
-🚧 **Pre-alpha — Phase 0 (documentation & scaffolding).** The design lives in [`docs/`](./docs).
-See the [roadmap](./docs/roadmap.md) for what's next.
+🚧 **Pre-alpha — implementation underway.** The foundation is in place: the shared contract
+(`@skein/core`), the `langgraph.json` loader (`@skein/config`), the in-memory driver
+(`@skein/storage-memory`), and the framework-agnostic **run engine + Agent Protocol handlers**
+(`@skein/agent-protocol`) — assistants, threads, the three run modes, the store, SSE streaming, and
+interrupt/resume, all unit-tested against real LangGraph. Next up: the Express adapter and `skein
+dev`. See the [roadmap](./docs/roadmap.md).
 
 ## Architecture
 
 An Nx monorepo of small packages:
 
-| Package | Purpose |
-| --- | --- |
-| `@skein/core` | Framework-agnostic Agent Protocol engine (the heart) |
-| `@skein/config` | `langgraph.json` parser + graph loader (`path:export`) |
-| `@skein/express` | Express adapter (v1) |
-| `@skein/fastify` / `@skein/nestjs` | Additional adapters (later) |
-| `@skein/storage-memory` | In-memory storage driver (dev/tests) |
-| `@skein/storage-postgres` | Postgres driver + pgvector (prod) |
-| `@skein/redis` | Redis job queue + cross-instance pub/sub streaming |
-| `skein` (CLI) | `skein dev` / `up` / `build` / `dockerfile` |
+| Package                            | Purpose                                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `@skein/core`                      | The shared contract — Agent Protocol wire types, `SkeinStore` + queue/bus interfaces, edge error                 |
+| `@skein/agent-protocol`            | Framework-agnostic Agent Protocol engine — run engine, handler table, SSE (the heart); independently publishable |
+| `@skein/config`                    | `langgraph.json` parser + graph loader (`path:export`)                                                           |
+| `@skein/express`                   | Express adapter (v1)                                                                                             |
+| `@skein/fastify` / `@skein/nestjs` | Additional adapters (later)                                                                                      |
+| `@skein/storage-memory`            | In-memory storage driver (dev/tests)                                                                             |
+| `@skein/storage-postgres`          | Postgres driver + pgvector (prod)                                                                                |
+| `@skein/redis`                     | Redis job queue + cross-instance pub/sub streaming                                                               |
+| `skein` (CLI)                      | `skein dev` / `up` / `build` / `dockerfile`                                                                      |
 
 Read the full design in [`docs/`](./docs):
 

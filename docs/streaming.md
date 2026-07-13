@@ -10,15 +10,15 @@ Reference: LangGraph streaming — <https://docs.langchain.com/oss/javascript/la
 
 A `CompiledStateGraph.stream(input, { streamMode })` can emit any combination of:
 
-| Mode | Emits |
-| --- | --- |
-| `values` | Full state after each step |
-| `updates` | State deltas per node (**default**) |
-| `messages` | Complete messages |
+| Mode             | Emits                                             |
+| ---------------- | ------------------------------------------------- |
+| `values`         | Full state after each step                        |
+| `updates`        | State deltas per node (**default**)               |
+| `messages`       | Complete messages                                 |
 | `messages-tuple` | Message chunk + metadata tuples (token streaming) |
-| `custom` | User-emitted custom events |
-| `events` | Fine-grained execution events |
-| `debug` | Detailed debug info |
+| `custom`         | User-emitted custom events                        |
+| `events`         | Fine-grained execution events                     |
+| `debug`          | Detailed debug info                               |
 
 Multiple modes can be requested at once; Skein preserves that.
 

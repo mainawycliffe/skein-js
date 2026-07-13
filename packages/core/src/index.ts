@@ -31,6 +31,7 @@ export type {
   AssistantCreate,
   AssistantRepo,
   RunCreate,
+  RunKwargs,
   RunRepo,
   SkeinStore,
   StoreRepo,

@@ -51,4 +51,17 @@ describe("MemoryRunEventBus", () => {
 
     expect((await collected).map((f) => f.seq)).toEqual([1, 2]);
   });
+
+  it("evicts the oldest closed runs beyond the retention cap (bounded memory)", async () => {
+    const bus = new MemoryRunEventBus({ maxRetainedRuns: 2 });
+    for (const runId of ["a", "b", "c"]) {
+      await bus.publish(runId, frame(1));
+      await bus.close(runId);
+    }
+    // "a"'s buffer was dropped (oldest beyond the cap of 2): a late join replays nothing and
+    // completes at once (closed tombstone — no hang). "b"/"c" still replay their buffered frame.
+    expect(await collect(bus.subscribe("a"))).toEqual([]);
+    expect((await collect(bus.subscribe("b"))).map((f) => f.seq)).toEqual([1]);
+    expect((await collect(bus.subscribe("c"))).map((f) => f.seq)).toEqual([1]);
+  });
 });

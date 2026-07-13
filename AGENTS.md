@@ -86,16 +86,17 @@ sibling.
 
 ## Package map
 
-| Package | Role |
-| --- | --- |
-| `@skein/core` | Framework-agnostic Agent Protocol engine (the heart) |
-| `@skein/config` | `langgraph.json` parser + graph loader (wraps `@langchain/langgraph-api`) |
-| `@skein/express` · `@skein/fastify` · `@skein/nestjs` | Framework adapters (Express first) |
-| `@skein/storage-memory` | In-memory `SkeinStore` + queue (dev/tests) |
-| `@skein/storage-postgres` | Postgres `SkeinStore` + pgvector; reuses `PostgresSaver` |
-| `@skein/redis` | Run **queue** + cross-instance pub/sub (not a checkpointer) |
-| `skein` (CLI) | Drop-in `dev` / `up` / `build` / `dockerfile` |
-| `@skein/test-support` | *(private)* Testcontainers helpers + `SkeinStore` conformance suite |
+| Package                                               | Role                                                                                                          |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `@skein/core`                                         | The shared contract: Agent Protocol wire types + `SkeinStore`/queue/bus interfaces + edge error               |
+| `@skein/agent-protocol`                               | Framework-agnostic Agent Protocol engine — run engine, handler table, SSE (the heart); publishable on its own |
+| `@skein/config`                                       | `langgraph.json` parser + graph loader (wraps `@langchain/langgraph-api`)                                     |
+| `@skein/express` · `@skein/fastify` · `@skein/nestjs` | Framework adapters (Express first)                                                                            |
+| `@skein/storage-memory`                               | In-memory `SkeinStore` + queue (dev/tests)                                                                    |
+| `@skein/storage-postgres`                             | Postgres `SkeinStore` + pgvector; reuses `PostgresSaver`                                                      |
+| `@skein/redis`                                        | Run **queue** + cross-instance pub/sub (not a checkpointer)                                                   |
+| `skein` (CLI)                                         | Drop-in `dev` / `up` / `build` / `dockerfile`                                                                 |
+| `@skein/test-support`                                 | _(private)_ Testcontainers helpers + `SkeinStore` conformance suite                                           |
 
 Examples live in `examples/` (`express-basic`, `react-usestream`).
 

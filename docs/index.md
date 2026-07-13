@@ -56,8 +56,11 @@ Skein by changing only a URL.
              ┌──────────────────────▼──────────────────────┐
   adapters   │   @skein/express  (· fastify · nestjs)       │
              ├─────────────────────────────────────────────┤
-   core      │   @skein/core  — router · run engine ·       │
-             │   streaming · auth                           │
+  protocol   │   @skein/agent-protocol — handler table ·    │
+             │   run engine · streaming (SSE)               │
+             ├─────────────────────────────────────────────┤
+   contract  │   @skein/core — wire types · SkeinStore +    │
+             │   queue/bus interfaces · edge error          │
              ├───────────────┬───────────────┬─────────────┤
              │  @skein/config│ storage driver│  @skein/redis│
              │ (langgraph.   │ memory /      │ queue + pub/ │
@@ -67,23 +70,26 @@ Skein by changing only a URL.
                           LangGraph.js compiled graphs
 ```
 
-- **`@skein/core`** holds the protocol logic once, against *normalized* request/response
-  types. Framework adapters are thin shims. See each doc below for detail.
+- **`@skein/core`** is the shared contract — wire types plus the `SkeinStore`, queue, and bus
+  interfaces every other package depends on.
+- **`@skein/agent-protocol`** holds the protocol logic once, against _normalized_ request/response
+  types, driven entirely by injected dependencies. Framework adapters are thin shims, and the
+  package is publishable on its own. See each doc below for detail.
 
 ## Documentation map
 
-| Doc | Covers |
-| --- | --- |
-| [reuse.md](./reuse.md) | **What we reuse from LangGraph OSS vs. what we rebuild** |
-| [code-practices.md](./code-practices.md) | Readability, functional style, simplicity conventions |
-| [testing.md](./testing.md) | Unit + Testcontainers integration + conformance suite |
-| [agent-protocol.md](./agent-protocol.md) | The REST + streaming endpoints Skein implements |
-| [langgraph-cli-compat.md](./langgraph-cli-compat.md) | `langgraph.json` fields + CLI commands |
-| [streaming.md](./streaming.md) | LangGraph stream modes → Agent Protocol SSE |
-| [react-sdk.md](./react-sdk.md) | `@langchain/langgraph-sdk` + `useStream` compatibility |
-| [storage.md](./storage.md) | `SkeinStore`, in-memory + Postgres, pgvector, checkpointer |
-| [runs-and-redis.md](./runs-and-redis.md) | Run engine, queue, cross-instance streaming |
-| [roadmap.md](./roadmap.md) | Milestones and post-MVP non-goals |
+| Doc                                                  | Covers                                                     |
+| ---------------------------------------------------- | ---------------------------------------------------------- |
+| [reuse.md](./reuse.md)                               | **What we reuse from LangGraph OSS vs. what we rebuild**   |
+| [code-practices.md](./code-practices.md)             | Readability, functional style, simplicity conventions      |
+| [testing.md](./testing.md)                           | Unit + Testcontainers integration + conformance suite      |
+| [agent-protocol.md](./agent-protocol.md)             | The REST + streaming endpoints Skein implements            |
+| [langgraph-cli-compat.md](./langgraph-cli-compat.md) | `langgraph.json` fields + CLI commands                     |
+| [streaming.md](./streaming.md)                       | LangGraph stream modes → Agent Protocol SSE                |
+| [react-sdk.md](./react-sdk.md)                       | `@langchain/langgraph-sdk` + `useStream` compatibility     |
+| [storage.md](./storage.md)                           | `SkeinStore`, in-memory + Postgres, pgvector, checkpointer |
+| [runs-and-redis.md](./runs-and-redis.md)             | Run engine, queue, cross-instance streaming                |
+| [roadmap.md](./roadmap.md)                           | Milestones and post-MVP non-goals                          |
 
 ## References
 
