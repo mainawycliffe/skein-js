@@ -1,0 +1,67 @@
+// A running skein Express server backed by a zero-setup echo graph and in-memory drivers, so a test
+// is one call away from exercising the real adapter over HTTP. Uses the injected-`deps` path (no
+// langgraph.json on disk needed).
+
+import { AIMessage, type BaseMessage } from "@langchain/core/messages";
+import { type CompiledGraph, MemorySaver, MessagesAnnotation, StateGraph } from "@langchain/langgraph";
+import type { GraphResolver, GraphSchemas, ProtocolDeps } from "@skein-js/agent-protocol";
+import { MemoryRunEventBus, MemoryRunQueue, MemorySkeinStore } from "@skein-js/storage-memory";
+import type { CorsOptions } from "cors";
+
+import { createExpressServer, type SkeinExpressServer } from "../create-express-server.js";
+
+/** A deterministic graph that echoes the last message back — no API key, no network. */
+function buildEchoGraph(): CompiledGraph<string> {
+  function echo(state: typeof MessagesAnnotation.State): { messages: BaseMessage[] } {
+    const last = state.messages.at(-1);
+    const text = typeof last?.content === "string" ? last.content : "";
+    return { messages: [new AIMessage(`echo: ${text}`)] };
+  }
+  return new StateGraph(MessagesAnnotation)
+    .addNode("echo", echo)
+    .addEdge("__start__", "echo")
+    .addEdge("echo", "__end__")
+    .compile() as unknown as CompiledGraph<string>;
+}
+
+/** A `GraphResolver` exposing a single `echo` graph. */
+export function createEchoResolver(): GraphResolver {
+  const graph = buildEchoGraph();
+  return {
+    ids: ["echo"],
+    load: async () => graph,
+    schemas: async (graphId) => ({ [graphId]: { graph_id: graphId } }) as unknown as GraphSchemas,
+  };
+}
+
+/** In-memory `ProtocolDeps` around the echo graph. */
+export function createEchoDeps(): ProtocolDeps {
+  return {
+    store: new MemorySkeinStore(),
+    graphs: createEchoResolver(),
+    queue: new MemoryRunQueue(),
+    bus: new MemoryRunEventBus(),
+    checkpointer: new MemorySaver(),
+  };
+}
+
+export interface RunningServer {
+  /** e.g. `http://127.0.0.1:54321` — point a client (or `fetch`) here. */
+  baseUrl: string;
+  server: SkeinExpressServer;
+  /** Stop the worker and close the HTTP server. */
+  close: () => Promise<void>;
+}
+
+/** Boot the echo server on an ephemeral loopback port. `cors` is off unless explicitly enabled. */
+export async function startEchoServer(
+  options: { cors?: boolean | CorsOptions } = {},
+): Promise<RunningServer> {
+  const server = await createExpressServer({ deps: createEchoDeps(), cors: options.cors });
+  const httpServer = await server.listen(0, "127.0.0.1");
+  const address = httpServer.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("expected a bound TCP address");
+  }
+  return { baseUrl: `http://127.0.0.1:${address.port}`, server, close: () => server.close() };
+}

@@ -38,10 +38,22 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@skein-js/core": "workspace:*"
+    "@skein-js/agent-protocol": "workspace:*",
+    "@skein-js/config": "workspace:*",
+    "@skein-js/core": "workspace:*",
+    "@skein-js/storage-memory": "workspace:*",
+    "cors": "^2.8.5"
   },
   "peerDependencies": {
+    "@langchain/langgraph": "^1.4.0",
     "express": ">=4.18.0"
+  },
+  "devDependencies": {
+    "@langchain/core": "^1.2.0",
+    "@langchain/langgraph": "^1.4.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "express": "^5.2.1"
   },
   "publishConfig": {
     "access": "public"
