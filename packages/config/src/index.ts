@@ -9,7 +9,14 @@ export { langgraphJsonSchema, parseLanggraphJson } from "./langgraph-json.js";
 export type { LanggraphJson } from "./langgraph-json.js";
 
 export { loadGraph, parseGraphSpec } from "./graph-spec.js";
-export type { CompiledGraphFactory, GraphSpec, ResolvedGraph } from "./graph-spec.js";
+export type {
+  CompiledGraphFactory,
+  GraphSpec,
+  ModuleImporter,
+  ResolvedGraph,
+} from "./graph-spec.js";
+
+export { parseEnvFile, resolveEnv } from "./resolve-env.js";
 
 export { SkeinConfigError } from "./errors.js";
 export type { SkeinConfigErrorOptions } from "./errors.js";

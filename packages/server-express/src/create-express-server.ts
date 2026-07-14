@@ -4,10 +4,30 @@
 
 import type { Server } from "node:http";
 
-import type { ProtocolRuntime } from "@skein-js/agent-protocol";
-import express, { type Express } from "express";
+import type { Logger, ProtocolRuntime } from "@skein-js/agent-protocol";
+import express, { type Express, type RequestHandler } from "express";
 
 import { skeinRouter, type SkeinRouterOptions } from "./skein-router.js";
+
+/**
+ * One log line per request: `GET /threads/x 200 5ms`. Logs on `finish` (response fully sent) or on
+ * `close` (client aborted first — common when an SSE stream is cancelled), whichever comes first, so
+ * cancelled streams are not silently omitted. A `once` guard keeps it to a single line per request.
+ */
+function requestLogger(logger: Logger): RequestHandler {
+  return (req, res, next) => {
+    const startedAt = Date.now();
+    let logged = false;
+    const log = () => {
+      if (logged) return;
+      logged = true;
+      logger.info(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - startedAt}ms`);
+    };
+    res.once("finish", log);
+    res.once("close", log);
+    next();
+  };
+}
 
 export interface SkeinExpressServer {
   /** The Express app, protocol mounted at `/`. Mount extra middleware or routes before `listen`. */
@@ -26,6 +46,8 @@ export async function createExpressServer(
 ): Promise<SkeinExpressServer> {
   const { router, runtime } = await skeinRouter(options);
   const app = express();
+  // Log requests before the router handles them, when a logger is provided (e.g. `skein dev`).
+  if (options.logger) app.use(requestLogger(options.logger));
   app.use(router);
 
   let server: Server | undefined;

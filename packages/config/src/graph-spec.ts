@@ -15,6 +15,17 @@ import { SkeinConfigError } from "./errors.js";
 
 export type { GraphSpec };
 
+/**
+ * How a graph module is loaded from its absolute source path. Defaults to a native dynamic
+ * `import()`, but `skein dev` injects a vite-backed importer so TypeScript graphs load (and
+ * hot-reload) through vite's transform pipeline without a separate TS loader process.
+ */
+export type ModuleImporter = (sourceFile: string) => Promise<Record<string, unknown>>;
+
+/** The default importer: a native ESM dynamic import of the file URL. */
+const nativeImport: ModuleImporter = (sourceFile) =>
+  import(pathToFileURL(sourceFile).href) as Promise<Record<string, unknown>>;
+
 /** A factory export: called (optionally with config) to produce a compiled graph. */
 export type CompiledGraphFactory = (config: {
   configurable?: Record<string, unknown>;
@@ -83,10 +94,13 @@ function afterResolve(graphLike: unknown): CompiledGraph<string> {
  * returned un-invoked (as a {@link CompiledGraphFactory}) so the caller can supply per-run
  * config, exactly as LangGraph does.
  */
-export async function loadGraph(spec: GraphSpec): Promise<ResolvedGraph> {
+export async function loadGraph(
+  spec: GraphSpec,
+  importModule: ModuleImporter = nativeImport,
+): Promise<ResolvedGraph> {
   let module: Record<string, unknown>;
   try {
-    module = (await import(pathToFileURL(spec.sourceFile).href)) as Record<string, unknown>;
+    module = await importModule(spec.sourceFile);
   } catch (cause) {
     throw new SkeinConfigError(`Failed to import graph module "${spec.sourceFile}".`, { cause });
   }

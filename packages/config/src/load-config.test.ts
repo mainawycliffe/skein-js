@@ -1,5 +1,5 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -45,6 +45,25 @@ describe("loadConfig", () => {
     expect(root).toBeDefined();
     expect(root).toHaveProperty("state");
     expect(root).toHaveProperty("input");
+  }, 30_000);
+
+  it("routes graph loading through a custom importModule (used by `skein dev`'s vite loader)", async () => {
+    const imported: string[] = [];
+    const { graphs } = await loadConfig({
+      cwd: exampleDir,
+      importModule: async (sourceFile) => {
+        imported.push(sourceFile);
+        return (await import(pathToFileURL(sourceFile).href)) as Record<string, unknown>;
+      },
+    });
+
+    const echo = await graphs.load("echo");
+    expect(typeof echo === "function" ? "factory" : "graph").toBe("graph");
+    expect(imported.some((file) => file.endsWith("echo-graph.ts"))).toBe(true);
+
+    // Schemas are static source analysis, independent of the importer, so introspection still works.
+    const schemas = await graphs.schemas("echo");
+    expect(schemas["graph"]).toHaveProperty("state");
   }, 30_000);
 
   it("caches the compiled graph across loads", async () => {

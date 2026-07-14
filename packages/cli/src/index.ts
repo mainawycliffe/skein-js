@@ -9,6 +9,8 @@ import { createRequire } from "node:module";
 
 import { Command, InvalidArgumentError } from "@commander-js/extra-typings";
 
+import { runDev } from "./dev-command.js";
+
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
 
@@ -41,11 +43,11 @@ program
   .description("Run the in-process dev server with hot reload (no Docker).")
   .option("-c, --config <path>", "Path to langgraph.json", "langgraph.json")
   .option("-p, --port <port>", "Port to bind", parsePort, 2024)
-  .option("--host <host>", "Host to bind", "localhost")
+  // Bind IPv4 explicitly: "localhost" can resolve to `::1`, which trips IPv4-only SDK clients.
+  .option("--host <host>", "Host to bind", "127.0.0.1")
   .option("--no-reload", "Disable hot reload")
-  .action(() => {
-    throw new NotImplementedError("dev");
-  });
+  .option("--no-persist", "Don't persist dev state to .skein/ between restarts")
+  .action((options) => runDev(options));
 
 program
   .command("up")

@@ -18,6 +18,9 @@ out/
 # env
 .env
 .env.local
+
+# skein dev persisted state
+.skein/
 .env.*.local
 
 # logs

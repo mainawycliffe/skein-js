@@ -49,12 +49,39 @@ Your existing clients keep working against `localhost` with only a URL change:
 
 ## Status
 
-🚧 **Pre-alpha — implementation underway.** The foundation is in place: the shared contract
+🚧 **Pre-alpha — the drop-in dev loop works today.** In place: the shared contract
 (`@skein-js/core`), the `langgraph.json` loader (`@skein-js/config`), the in-memory driver
-(`@skein-js/storage-memory`), and the framework-agnostic **run engine + Agent Protocol handlers**
-(`@skein-js/agent-protocol`) — assistants, threads, the three run modes, the store, SSE streaming, and
-interrupt/resume, all unit-tested against real LangGraph. Next up: the Express adapter and `skein
-dev`. See the [roadmap](./docs/roadmap.md).
+(`@skein-js/storage-memory`), the framework-agnostic **run engine + Agent Protocol handlers**
+(`@skein-js/agent-protocol`), the **Express adapter** (`@skein-js/express`), and **`skein dev`** —
+an in-process dev server that runs an unchanged `langgraph.json` with no Docker, TypeScript graphs
+loaded via vite, state-preserving hot reload, and on-disk persistence across restarts. Next up:
+Postgres + Redis drivers and `skein up`. See the [roadmap](./docs/roadmap.md).
+
+## Try it from source
+
+```bash
+pnpm install
+pnpm nx build cli                     # builds the `skein` binary
+
+cd examples/migrated-langgraph        # a stock LangGraph project, unchanged
+pnpm dev                              # → skein dev, http://127.0.0.1:2024
+```
+
+In another terminal, talk to it with the official SDK (or point the Agent Chat UI at the same URL,
+graph id `agent`):
+
+```bash
+TID=$(curl -s -X POST http://127.0.0.1:2024/threads -H 'content-type: application/json' -d '{}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["thread_id"])')
+
+curl -s -X POST "http://127.0.0.1:2024/threads/$TID/runs/wait" \
+  -H 'content-type: application/json' \
+  -d "{\"assistant_id\":\"agent\",\"input\":{\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}}"
+```
+
+Edit `examples/migrated-langgraph/src/graph.ts` and save — the server hot-reloads while keeping your
+threads. `Ctrl-C` and restart — state is restored from `.skein/`. Full walkthrough and the
+end-to-end test: [examples/migrated-langgraph](./examples/migrated-langgraph/README.md).
 
 ## Architecture
 

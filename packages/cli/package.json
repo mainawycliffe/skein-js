@@ -46,7 +46,8 @@
     "@skein-js/core": "workspace:*",
     "@skein-js/config": "workspace:*",
     "@skein-js/express": "workspace:*",
-    "commander": "~13.1.0"
+    "commander": "~13.1.0",
+    "vite": "^8.1.0"
   },
   "publishConfig": {
     "access": "public"

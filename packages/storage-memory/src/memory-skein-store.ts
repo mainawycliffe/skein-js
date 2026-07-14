@@ -235,4 +235,42 @@ export class MemorySkeinStore implements SkeinStore {
       return [...seen.values()].map((namespace) => [...namespace]);
     },
   };
+
+  /**
+   * A JSON-serializable copy of every row, so `skein dev` can persist dev state to disk and
+   * restore it on the next boot. Rows are deep-cloned at the boundary, exactly like the repo reads.
+   */
+  snapshot(): MemoryStoreSnapshot {
+    const entries = <T>(map: Map<string, T>): [string, T][] =>
+      [...map.entries()].map(([id, row]) => [id, clone(row)]);
+    return {
+      assistants: entries(this.#assistants),
+      threads: entries(this.#threads),
+      runs: entries(this.#runs),
+      runKwargs: entries(this.#runKwargs),
+      items: entries(this.#items),
+    };
+  }
+
+  /** Replace all rows with a {@link snapshot}. Used by `skein dev` to restore persisted dev state. */
+  hydrate(snapshot: MemoryStoreSnapshot): void {
+    const fill = <T>(map: Map<string, T>, rows: [string, T][]): void => {
+      map.clear();
+      for (const [id, row] of rows) map.set(id, clone(row));
+    };
+    fill(this.#assistants, snapshot.assistants);
+    fill(this.#threads, snapshot.threads);
+    fill(this.#runs, snapshot.runs);
+    fill(this.#runKwargs, snapshot.runKwargs);
+    fill(this.#items, snapshot.items);
+  }
+}
+
+/** A JSON-serializable copy of a {@link MemorySkeinStore}'s rows. */
+export interface MemoryStoreSnapshot {
+  assistants: [string, Assistant][];
+  threads: [string, Thread][];
+  runs: [string, Run][];
+  runKwargs: [string, RunKwargs][];
+  items: [string, Item][];
 }

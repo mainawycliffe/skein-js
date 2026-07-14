@@ -90,9 +90,22 @@ importers:
       skein-js:
         specifier: workspace:*
         version: link:../../packages/cli
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.20.0)(lightningcss@1.32.0)
+
+  examples/migrated-langgraph:
+    dependencies:
+      '@langchain/core':
+        specifier: ^1.2.0
+        version: 1.2.2(ws@8.21.0)
+      '@langchain/langgraph':
+        specifier: ^1.4.0
+        version: 1.4.7(@langchain/core@1.2.2(ws@8.21.0))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(zod@3.25.76)
+    devDependencies:
+      '@langchain/langgraph-sdk':
+        specifier: ^1.9.0
+        version: 1.9.25(@langchain/core@1.2.2(ws@8.21.0))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      skein-js:
+        specifier: workspace:*
+        version: link:../../packages/cli
 
   examples/react-usestream:
     dependencies:
@@ -155,6 +168,9 @@ importers:
       commander:
         specifier: ~13.1.0
         version: 13.1.0
+      vite:
+        specifier: ^8.1.0
+        version: 8.1.4(@types/node@22.20.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0)
 
   packages/config:
     dependencies:
@@ -10945,6 +10961,21 @@ snapshots:
     optionalDependencies:
       '@types/node': 22.20.0
       esbuild: 0.27.7
+      fsevents: 2.3.3
+      jiti: 2.7.0
+      tsx: 4.22.4
+      yaml: 2.9.0
+
+  vite@8.1.4(@types/node@22.20.0)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0):
+    dependencies:
+      lightningcss: 1.32.0
+      picomatch: 4.0.5
+      postcss: 8.5.16
+      rolldown: 1.1.5
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 22.20.0
+      esbuild: 0.28.1
       fsevents: 2.3.3
       jiti: 2.7.0
       tsx: 4.22.4

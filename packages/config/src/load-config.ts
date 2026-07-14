@@ -14,7 +14,13 @@ import {
 } from "@langchain/langgraph-api/schema";
 
 import { SkeinConfigError } from "./errors.js";
-import { loadGraph, parseGraphSpec, type GraphSpec, type ResolvedGraph } from "./graph-spec.js";
+import {
+  loadGraph,
+  parseGraphSpec,
+  type GraphSpec,
+  type ModuleImporter,
+  type ResolvedGraph,
+} from "./graph-spec.js";
 import { parseLanggraphJson, type LanggraphJson } from "./langgraph-json.js";
 
 /** JSON schemas extracted from a graph (and any subgraphs), keyed by subgraph namespace. */
@@ -48,6 +54,13 @@ export interface LoadConfigOptions {
   cwd?: string;
   /** Path to a `langgraph.json`, absolute or relative to `cwd`. Defaults to `langgraph.json`. */
   configPath?: string;
+  /**
+   * How graph modules are imported for execution. Defaults to a native dynamic `import()`. `skein
+   * dev` injects a vite-backed importer so TypeScript graphs load and hot-reload through vite
+   * without a separate TS-loader process. Schema introspection is unaffected — it statically
+   * analyses the TypeScript source and never executes the module.
+   */
+  importModule?: ModuleImporter;
 }
 
 async function readJsonFile(filePath: string): Promise<unknown> {
@@ -68,6 +81,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Skein
   const cwd = options.cwd ?? process.cwd();
   const configPath = path.resolve(cwd, options.configPath ?? "langgraph.json");
   const configDir = path.dirname(configPath);
+  const { importModule } = options;
 
   const config = parseLanggraphJson(await readJsonFile(configPath));
 
@@ -103,10 +117,12 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Skein
     // throw — callers uniformly `await graphs.load(id)`.
     async load(graphId) {
       const spec = specFor(graphId);
-      return memoize(graphCache, graphId, () => loadGraph(spec));
+      return memoize(graphCache, graphId, () => loadGraph(spec, importModule));
     },
     async schemas(graphId) {
       const spec = specFor(graphId);
+      // Static analysis of the TypeScript source — no module execution — so this works the same
+      // whether graphs load natively or through a custom `importModule` (vite `skein dev`).
       return memoize(schemaCache, graphId, () => getStaticGraphSchema(spec));
     },
   };

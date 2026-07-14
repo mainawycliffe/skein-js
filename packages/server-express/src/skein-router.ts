@@ -9,6 +9,7 @@ import {
   type ProtocolDeps,
   type ProtocolRuntime,
 } from "@skein-js/agent-protocol";
+import type { ModuleImporter } from "@skein-js/config";
 import type { CorsOptions } from "cors";
 import type { Router } from "express";
 
@@ -25,11 +26,30 @@ interface SkeinRouterCommonOptions {
    * `false` to force it off. An explicit value wins over `http.cors`.
    */
   cors?: boolean | CorsOptions;
+  /**
+   * Eager-load every declared graph at boot instead of lazily on first request. `skein dev` sets
+   * this so (a) graph import errors surface at startup and (b) the graph source files enter the
+   * running process's module graph — which is what arms `tsx watch`'s hot reload (it only watches
+   * files that have actually been imported). Load failures are logged, not thrown, so one bad
+   * graph never takes the server down or breaks the watch loop.
+   */
+  warm?: boolean;
 }
 
 /** Either point at a `langgraph.json` (in-memory runtime) or inject a ready `ProtocolDeps`. */
 export type SkeinRouterOptions = SkeinRouterCommonOptions &
-  ({ config: string; deps?: never } | { deps: ProtocolDeps; config?: never });
+  (
+    | {
+        config: string;
+        /**
+         * How graph modules are imported for the in-memory runtime. Defaults to a native
+         * dynamic `import()`; `skein dev` injects a vite-backed importer for TypeScript graphs.
+         */
+        importModule?: ModuleImporter;
+        deps?: never;
+      }
+    | { deps: ProtocolDeps; config?: never; importModule?: never }
+  );
 
 export interface SkeinRouter {
   /** Mount on an Express app: `app.use(router)`. */
@@ -48,13 +68,22 @@ export async function skeinRouter(options: SkeinRouterOptions): Promise<SkeinRou
   if (options.deps) {
     deps = options.deps;
   } else {
-    const loaded = await loadInMemoryRuntime(options.config);
+    const loaded = await loadInMemoryRuntime(options.config, options.importModule);
     deps = loaded.deps;
     corsFromConfig = loaded.cors;
   }
 
   const runtime = createProtocolRuntime(deps);
   await runtime.service.assistants.registerGraphAssistants();
+  if (options.warm) {
+    await Promise.all(
+      deps.graphs.ids.map((graphId) =>
+        deps.graphs.load(graphId).catch((error: unknown) => {
+          options.logger?.warn(`Failed to warm graph "${graphId}".`, error);
+        }),
+      ),
+    );
+  }
   runtime.worker.start();
 
   const router = createHandlerRouter(runtime.handlers, {

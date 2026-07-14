@@ -3,4 +3,5 @@
 // shared conformance suite as every other driver. See docs/storage.md.
 
 export { MemorySkeinStore } from "./memory-skein-store.js";
+export type { MemoryStoreSnapshot } from "./memory-skein-store.js";
 export { MemoryRunEventBus, MemoryRunQueue } from "./memory-queue.js";

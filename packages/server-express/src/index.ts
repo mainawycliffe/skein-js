@@ -16,7 +16,12 @@ export type { HandlerRouterOptions } from "./routes.js";
 export { toProtocolRequest } from "./to-protocol-request.js";
 export { sendProtocolResponse } from "./send-protocol-response.js";
 export { sendErrorResponse } from "./error-response.js";
-export { loadInMemoryRuntime } from "./in-memory-runtime.js";
+export { loadInMemoryRuntime, loadReloadableInMemoryRuntime } from "./in-memory-runtime.js";
+export type {
+  InMemoryRuntimeConfig,
+  ReloadableInMemoryRuntime,
+  DevStateSnapshot,
+} from "./in-memory-runtime.js";
 
 // LangGraph-compatible CORS: map a langgraph.json `http.cors` block to `cors` options.
 export { corsFromHttpConfig, toCorsOptions } from "./cors-config.js";
