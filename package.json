@@ -18,7 +18,9 @@
     "test:coverage": "nx run-many -t test --coverage",
     "format": "nx format:write",
     "format:check": "nx format:check",
-    "affected": "nx affected -t lint test typecheck build"
+    "affected": "nx affected -t lint test typecheck build",
+    "release": "nx run-many -t build && pnpm -r publish --access public",
+    "release:dry-run": "nx run-many -t build && pnpm -r publish --access public --dry-run --no-git-checks"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
