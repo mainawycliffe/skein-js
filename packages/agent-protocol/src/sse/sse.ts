@@ -4,7 +4,7 @@
 // can't be `"end"`), read from the run's final status once the frame iterator completes.
 // See docs/streaming.md.
 
-import type { RunFrame, RunStatus } from "@skein-js/core";
+import { serializeWireJson, type RunFrame, type RunStatus } from "@skein-js/core";
 
 /** SSE response headers an adapter should set before writing the event stream. */
 export const SSE_HEADERS: Readonly<Record<string, string>> = {
@@ -15,7 +15,9 @@ export const SSE_HEADERS: Readonly<Record<string, string>> = {
 
 /** Serialize one frame as an SSE block: `id:` for reconnect, `event:` name, JSON `data:`. */
 export function encodeFrame(frame: RunFrame): string {
-  return `id: ${frame.seq}\nevent: ${frame.event}\ndata: ${JSON.stringify(frame.data)}\n\n`;
+  // `serializeWireJson` (not bare `JSON.stringify`) so streamed LangChain messages reach the client
+  // as `{ type: "ai", content }` — the shape `useStream` / Agent Chat UI read.
+  return `id: ${frame.seq}\nevent: ${frame.event}\ndata: ${serializeWireJson(frame.data)}\n\n`;
 }
 
 /** Serialize the synthesized terminal event from a run's final status. */

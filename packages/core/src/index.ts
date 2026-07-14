@@ -45,6 +45,9 @@ export { isTerminalRunStatus, TERMINAL_RUN_STATUSES } from "./store/skein-store.
 // Run queue + streaming pub/sub contract.
 export type { QueuedRun, RunEventBus, RunFrame, RunQueue } from "./queue/queue.js";
 
+// Outbound JSON serializer that flattens LangChain messages to the Agent Protocol wire shape.
+export { serializeWireJson } from "./wire/serialize-wire-json.js";
+
 // Edge error type.
 export { isSkeinHttpError, SkeinHttpError } from "./errors/skein-http-error.js";
 export type { SkeinHttpErrorOptions } from "./errors/skein-http-error.js";

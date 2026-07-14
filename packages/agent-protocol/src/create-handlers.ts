@@ -51,6 +51,7 @@ export interface ProtocolHandlers {
   patchThread: ProtocolHandler;
   deleteThread: ProtocolHandler;
   getThreadHistory: ProtocolHandler;
+  getThreadState: ProtocolHandler;
   // runs
   createWaitRun: ProtocolHandler;
   createStreamRun: ProtocolHandler;
@@ -143,6 +144,9 @@ export function createProtocolHandlers(service: ProtocolService): ProtocolHandle
       const options = limit === undefined ? undefined : { limit };
       return json(await service.threads.history(requireParam(req.params, "thread_id"), options));
     },
+
+    getThreadState: async (req) =>
+      json(await service.threads.getState(requireParam(req.params, "thread_id"))),
 
     // --- runs ---------------------------------------------------------------------------------
     createWaitRun: async (req) =>

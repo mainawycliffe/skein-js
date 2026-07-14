@@ -3,6 +3,7 @@
 // frames) and tears the run's frame subscription down when the client disconnects.
 
 import { SSE_HEADERS, type ProtocolResponse } from "@skein-js/agent-protocol";
+import { serializeWireJson } from "@skein-js/core";
 import type { Response } from "express";
 
 /** A vanished client turns writes into `EPIPE`/`ERR_STREAM_DESTROYED`; swallow them — we're closing. */
@@ -49,7 +50,9 @@ export async function sendProtocolResponse(
 ): Promise<void> {
   switch (response.kind) {
     case "json":
-      res.status(response.status).json(response.body);
+      // `serializeWireJson` (not `res.json`) so any LangChain messages in the body — thread state,
+      // history, `runs.wait` values — go out flattened to the wire shape clients expect.
+      res.status(response.status).type("application/json").send(serializeWireJson(response.body));
       return;
     case "empty":
       res.status(response.status).end();

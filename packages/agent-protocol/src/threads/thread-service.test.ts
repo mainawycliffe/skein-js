@@ -57,4 +57,39 @@ describe("thread service", () => {
     expect(history.length).toBeGreaterThan(0);
     expect(history[0]?.values).toEqual({ value: "echo: hi" });
   });
+
+  it("returns the current state snapshot via getState (what useStream hydrates from)", async () => {
+    const service = await serviceWithAssistants();
+    const thread = await service.threads.create();
+    await service.runs.createWait({
+      thread_id: thread.thread_id,
+      assistant_id: "echo",
+      input: { value: "hi" },
+    });
+
+    const state = await service.threads.getState(thread.thread_id);
+    expect(state.values).toEqual({ value: "echo: hi" });
+  });
+
+  it("getState on a thread with no run returns an empty state, not an error", async () => {
+    const service = await serviceWithAssistants();
+    const thread = await service.threads.create();
+
+    const state = await service.threads.getState(thread.thread_id);
+    expect(state.values).toEqual({});
+    expect(state.next).toEqual([]);
+    // The empty state still reports the real thread id (matches LangGraph), not a blank.
+    expect(state.checkpoint?.thread_id).toBe(thread.thread_id);
+  });
+
+  it("getState returns a fresh empty-state object per call (no shared mutable singleton)", async () => {
+    const service = await serviceWithAssistants();
+    const a = await service.threads.create();
+    const b = await service.threads.create();
+
+    const stateA = await service.threads.getState(a.thread_id);
+    const stateB = await service.threads.getState(b.thread_id);
+    expect(stateA).not.toBe(stateB);
+    expect(stateA.next).not.toBe(stateB.next);
+  });
 });
