@@ -28,8 +28,10 @@ jobs:
           # `registry-url` here on purpose: it would write an empty _authToken line that defeats OIDC.
           node-version: 22.14.0
 
-      # OIDC trusted publishing requires npm >= 11.5.1; the Node 22 bundle ships an older npm.
-      - run: npm install -g npm@latest
+      # OIDC trusted publishing requires npm >= 11.5.1; the Node 22 bundle ships an older npm (10.9.2).
+      # Pin npm 11, NOT @latest: npm 12 requires Node >= 22.22.2 (newer than the Node pinned above), so
+      # `npm@latest` fails EBADENGINE here. npm 11.5.1+ already supports OIDC trusted publishing + provenance.
+      - run: npm install -g npm@11
       - run: pnpm install --frozen-lockfile
 
       # Build + typecheck as a release gate (tests run on PRs via ci.yml).
