@@ -12,6 +12,29 @@
     ],
     "sharedGlobals": ["{workspaceRoot}/tsconfig.base.json", "{workspaceRoot}/eslint.config.mjs"]
   },
+  "release": {
+    "projects": ["packages/*"],
+    "projectsRelationship": "fixed",
+    "releaseTag": {
+      "pattern": "v{version}"
+    },
+    "version": {
+      "currentVersionResolver": "git-tag",
+      "preVersionCommand": "pnpm nx run-many -t build typecheck"
+    },
+    "changelog": {
+      "projectChangelogs": false,
+      "workspaceChangelog": {
+        "createRelease": "github",
+        "file": "CHANGELOG.md"
+      }
+    },
+    "git": {
+      "commit": true,
+      "tag": true,
+      "push": true
+    }
+  },
   "plugins": [
     {
       "plugin": "@nx/eslint/plugin",

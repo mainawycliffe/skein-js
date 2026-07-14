@@ -19,8 +19,8 @@
     "format": "nx format:write",
     "format:check": "nx format:check",
     "affected": "nx affected -t lint test typecheck build",
-    "release": "nx run-many -t build && pnpm -r publish --access public",
-    "release:dry-run": "nx run-many -t build && pnpm -r publish --access public --dry-run --no-git-checks"
+    "release": "nx release --skip-publish",
+    "release:dry-run": "nx release --skip-publish --dry-run"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
