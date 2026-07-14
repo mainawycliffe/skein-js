@@ -28,6 +28,8 @@ Priority order (**bold = MVP**):
 6. **`skein` CLI — `dev`** — boots the Express server from `langgraph.json` in-process with
    hot reload, no Docker. The drop-in moment.
 7. **End-to-end / conformance** — drive with `@langchain/langgraph-sdk`; Agent Chat UI connects.
+   The model-backed FE/BE signal is `examples/gemini-chat` (a Gemini ReAct agent served by
+   `skein dev`) streamed into `examples/react-usestream` via `useStream`.
 8. **`@skein-js/redis`** — Redis queue + worker + cross-instance pub/sub streaming.
 9. **Storage-postgres + pgvector** — `SkeinStore` over `pg` + `PostgresSaver`; semantic
    store search; migrations.
@@ -62,7 +64,7 @@ Priority order (**bold = MVP**):
 | **Unit**                            | vitest per package; storage drivers against a shared `SkeinStore` conformance suite; run-engine transitions; SSE frame mapping.                                                          |
 | **Conformance / e2e**               | `examples/express-basic` exercised by the real `@langchain/langgraph-sdk` client (`threads.create`, `runs.stream`, `runs.wait`). If the official SDK is happy, the wire format is right. |
 | **Drop-in migration (headline)**    | `examples/migrated-langgraph` with a real `langgraph.json` run via `skein dev` in place of `langgraph dev`, no other change.                                                             |
-| **React `useStream` (headline FE)** | `examples/react-usestream` streams a reply token-by-token from skein-js.                                                                                                                 |
+| **React `useStream` (headline FE)** | `examples/react-usestream` streams a reply token-by-token from skein-js — pointed at the `examples/gemini-chat` Gemini backend for a live model-backed FE+BE run.                        |
 | **Interop**                         | Agent Chat UI points at the local server; streamed conversation renders.                                                                                                                 |
 | **Postgres + Redis**                | Conformance suite re-run against Postgres; cross-instance test — start a run on instance A, join its SSE stream from instance B via Redis.                                               |
 
