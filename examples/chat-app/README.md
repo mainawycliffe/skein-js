@@ -84,8 +84,9 @@ handler, referenced from [`langgraph.json`](./langgraph.json)'s `auth` block. sk
 every request across the whole Agent Protocol surface — the same custom-auth model as LangGraph
 Platform.
 
-It's frictionless by default: with no `SKEIN_API_KEY` set the server is open. Set one to require an
-`X-Api-Key` header:
+Posture: _open in dev, enforced in prod._ With no `SKEIN_API_KEY` the server is open and threads
+are not owner-scoped, so local dev needs no setup. Set one to require an `X-Api-Key` header and turn
+on ownership scoping:
 
 ```bash
 # backend
@@ -96,8 +97,9 @@ pnpm exec skein dev --port 2024
 echo 'NEXT_PUBLIC_SKEIN_API_KEY=some-secret' >> .env.local
 ```
 
-Requests without a valid key get `401`; every caller's threads and runs are scoped to them
-(`@auth.on("threads")` returns an `owner` filter), so one user can't read or mutate another's.
+Once enforced, requests without a valid key get `401`, and every caller's threads and runs are scoped
+to them (`@auth.on("threads")` returns an `owner` filter) so one user can't read or mutate another's.
+Note: enabling scoping hides threads created _before_ it — they carry no `owner` metadata.
 
 ## Tests
 
