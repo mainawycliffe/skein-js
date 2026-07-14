@@ -5,6 +5,7 @@ import { ArrowUp, Loader2, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 
+import { ApprovalCard } from "@/components/approval-card";
 import { Sidebar } from "@/components/sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ThinkingBlock } from "@/components/thinking-block";
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { type ChatSummary, loadChats, upsertChat } from "@/lib/history";
 import { answerText, roleOf, thinkingText, toolCalls, toolResultsByCall } from "@/lib/messages";
+import { parseApproval } from "@/lib/tool-results";
 
 const API_URL = process.env["NEXT_PUBLIC_SKEIN_URL"] ?? "http://localhost:2024";
 const ASSISTANT_ID = process.env["NEXT_PUBLIC_SKEIN_ASSISTANT_ID"] ?? "research";
@@ -21,9 +23,9 @@ const ASSISTANT_ID = process.env["NEXT_PUBLIC_SKEIN_ASSISTANT_ID"] ?? "research"
 const API_KEY = process.env["NEXT_PUBLIC_SKEIN_API_KEY"];
 
 const EXAMPLE_PROMPTS = [
-  "Research the latest on WebGPU and summarize the state of browser support.",
-  "Remember that I prefer concise, bulleted answers.",
-  "What do you remember about me?",
+  "Plan a trip to Tokyo — check the weather and find flights from San Francisco.",
+  "Remember that I fly out of SFO and prefer window seats.",
+  "Book the cheapest morning flight.",
 ];
 
 export default function Page() {
@@ -60,6 +62,8 @@ export default function Page() {
   const messages = thread.messages;
   // Tool results are separate `tool` messages; pair them to their calls so each card shows its output.
   const toolResults = toolResultsByCall(messages);
+  // When `book_flight` calls `interrupt()`, the run pauses and skein surfaces the approval payload here.
+  const approval = thread.interrupt ? parseApproval(thread.interrupt.value) : null;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -76,6 +80,12 @@ export default function Page() {
     }
     thread.submit({ messages: [{ type: "human", content: trimmed }] });
     setInput("");
+  }
+
+  // Resume a paused (interrupted) run with the user's decision. Passing a `command.resume` value is
+  // what makes `interrupt()` return in the graph — the human-in-the-loop half of the loop.
+  function resolveApproval(approved: boolean) {
+    thread.submit(undefined, { command: { resume: { approved } } });
   }
 
   // Leave the current conversation. Stop any in-flight run first so it doesn't keep streaming into a
@@ -110,7 +120,7 @@ export default function Page() {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b px-4 py-3">
           <div>
-            <h1 className="text-sm font-semibold">skein-js · research assistant</h1>
+            <h1 className="text-sm font-semibold">skein-js · research &amp; trip assistant</h1>
             <p className="text-xs text-muted-foreground">
               {API_URL} · <code>{ASSISTANT_ID}</code>
             </p>
@@ -122,10 +132,11 @@ export default function Page() {
           <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
             {messages.length === 0 && (
               <div className="mx-auto max-w-lg space-y-4 pt-10 text-center">
-                <h2 className="text-lg font-medium">What would you like to research?</h2>
+                <h2 className="text-lg font-medium">What can I help you plan?</h2>
                 <p className="text-sm text-muted-foreground">
-                  A Gemini agent that thinks out loud, searches the web, and remembers what you tell
-                  it — across conversations.
+                  A Gemini agent that thinks out loud, searches the web, pulls live-style data into
+                  rich cards, remembers what you tell it across conversations, and asks before it
+                  books anything.
                 </p>
                 <div className="flex flex-col gap-2">
                   {EXAMPLE_PROMPTS.map((prompt) => (
@@ -182,6 +193,14 @@ export default function Page() {
                 </div>
               );
             })}
+
+            {approval && (
+              <ApprovalCard
+                request={approval}
+                disabled={thread.isLoading}
+                onDecision={resolveApproval}
+              />
+            )}
 
             {thread.isLoading && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">

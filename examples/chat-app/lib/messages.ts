@@ -67,6 +67,9 @@ export function toolLabel(name: string): string {
   if (name === "web_search") return "Web search";
   if (name === "save_memory") return "Saved a memory";
   if (name === "recall_memory") return "Recalled memory";
+  if (name === "get_weather") return "Weather";
+  if (name === "search_flights") return "Flight search";
+  if (name === "book_flight") return "Book flight";
   return name;
 }
 

@@ -1,13 +1,14 @@
 # `chat-app` example
 
-The **flagship** skein-js demo: a real research assistant with a ChatGPT/Gemini-style UI. A Gemini
-agent **thinks out loud**, **searches the web**, and **remembers what you tell it across
-conversations** — served by `skein dev`, streamed into a Next.js + [shadcn/ui](https://ui.shadcn.com)
+The **flagship** skein-js demo: a real research + trip-planning assistant with a ChatGPT/Gemini-style
+UI. A Gemini agent **thinks out loud**, **searches the web**, **pulls structured data into rich cards**,
+**remembers what you tell it across conversations**, and **pauses for your approval before it books
+anything** — served by `skein dev`, streamed into a Next.js + [shadcn/ui](https://ui.shadcn.com)
 frontend via [`useStream`](../../docs/react-sdk.md).
 
-| Graph id   | File                                               | Needs a key?        | What it is                                                                                          |
-| ---------- | -------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------- |
-| `research` | [`src/research-agent.ts`](./src/research-agent.ts) | ✅ `GOOGLE_API_KEY` | A Gemini ReAct agent: **thinking** + a `web_search` tool + `save_memory` with auto-injected recall. |
+| Graph id   | File                                               | Needs a key?        | What it is                                                                                            |
+| ---------- | -------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------- |
+| `research` | [`src/research-agent.ts`](./src/research-agent.ts) | ✅ `GOOGLE_API_KEY` | A Gemini ReAct agent: **thinking** + web search + memory + trip tools with human-in-the-loop booking. |
 
 It's a plain LangGraph.js graph — skein serves it unchanged. What makes it a good showcase:
 
@@ -15,6 +16,15 @@ It's a plain LangGraph.js graph — skein serves it unchanged. What makes it a g
   streams its reasoning as `thinking` content blocks. The UI renders them in a collapsible panel.
 - **Web search.** A `web_search` tool uses [Tavily](https://tavily.com) when `TAVILY_API_KEY` is set,
   and falls back to a deterministic placeholder otherwise — so the demo runs on the Gemini key alone.
+- **Structured (JSON) tool results.** The trip tools (`get_weather`, `search_flights`) return
+  **structured JSON**, which the UI renders as rich **weather and flight cards** instead of raw text
+  (see [`components/tool-results/`](./components/tool-results) + the dispatcher in
+  [`tool-call-card.tsx`](./components/tool-call-card.tsx)). The data is deterministic mock data, so the
+  demo needs no extra keys or network.
+- **Human-in-the-loop.** `book_flight` calls LangGraph's `interrupt()`, so the run **pauses** and the
+  UI shows an [**approval card**](./components/approval-card.tsx); approving resumes the run with a
+  `Command` (`thread.submit(undefined, { command: { resume } })`). This works out of the box because
+  `skein dev` injects a checkpointer — the same interrupt/resume path LangGraph Platform provides.
 - **Long-term memory.** A `save_memory` tool writes durable facts, and relevant memories are **auto-injected**
   into the system prompt before each turn (a dynamic `prompt` on `createReactAgent`), so the agent
   remembers you **across threads** without depending on the model to call a recall tool. Both use
@@ -55,12 +65,16 @@ transcripts live on the skein-js server.)
 
 Open <http://localhost:3005> and try, in order:
 
-1. _"Research the current state of WebGPU browser support."_ — watch the **Thinking** panel and a
-   **web_search** tool card appear, then the answer stream in.
-2. _"Remember that I prefer concise, bulleted answers."_ — the agent calls **save_memory**.
-3. Click **New chat**, then ask _"What do you remember about me?"_ — it answers _"You prefer concise,
-   bulleted answers."_ The memory was saved in the first thread and auto-injected into this new one
-   from skein's injected store — no recall tool call needed.
+1. _"Plan a trip to Tokyo — check the weather and find flights from San Francisco."_ — watch the
+   **Thinking** panel, then a **weather card** and **flight cards** render from the tools' structured
+   JSON (not raw text).
+2. _"Remember that I fly out of SFO and prefer window seats."_ — the agent calls **save_memory**.
+3. _"Book the cheapest morning flight."_ — the agent calls **book_flight**, the run **pauses**, and an
+   **approval card** appears. Click **Approve & book** → the run resumes and a booking confirmation
+   card lands. (Reject to see the cancelled path.) This is skein's human-in-the-loop interrupt/resume.
+4. Click **New chat**, then ask _"Where do I fly out of?"_ — it answers _"SFO."_ The memory was saved
+   in the first thread and auto-injected into this new one from skein's injected store — no recall
+   tool call needed.
 
 ## Long-term memory with a durable store (optional)
 
