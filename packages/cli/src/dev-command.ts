@@ -35,6 +35,8 @@ export interface DevCommandOptions {
   store: StoreDriver;
   /** Run queue + stream bus: `"memory"` (default) or `"redis"` (`REDIS_URL`). */
   queue: QueueDriver;
+  /** `true` when `--verbose` was passed: log per-run activity (start/finish, tool calls, interrupts). */
+  verbose?: boolean;
 }
 
 /** Wait this long after the last change event before reloading, so a burst of saves is one reload. */
@@ -123,6 +125,9 @@ export async function runDev(options: DevCommandOptions): Promise<void> {
       );
     }
   }
+
+  // `--verbose`: have the run engine log per-run activity (start/finish, tool calls, interrupts).
+  if (options.verbose) runtime.deps.logRunActivity = true;
 
   let server: SkeinExpressServer;
   try {

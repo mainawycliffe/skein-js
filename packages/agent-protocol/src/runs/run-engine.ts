@@ -31,6 +31,7 @@ import { runStatusForSnapshot, snapshotToThreadUpdate } from "../threads/thread-
 
 import type { RunControl } from "./cancellation.js";
 import { toGraphCallOptions, toGraphInput } from "./run-input.js";
+import { describeInterrupts, extractToolActivity } from "./run-log.js";
 
 /** What the engine needs to execute one run. */
 export interface RunExecution {
@@ -138,6 +139,33 @@ export async function executeRun(deps: ResolvedDeps, exec: RunExecution): Promis
   const threadId = run.thread_id;
   let seq = 0;
 
+  // Verbose run activity (start/finish, tool calls, interrupts) — `skein dev --verbose`. Guarded so
+  // it costs nothing when off. Tool calls/results are logged once each; streaming repeats the same
+  // call across chunks, so we dedupe on the tool-call id (falling back to the name).
+  const startedAt = deps.clock().getTime();
+  const loggedTools = new Set<string>();
+  const logToolActivity = (data: unknown): void => {
+    const { calls, results } = extractToolActivity(data);
+    for (const call of calls) {
+      const key = `call:${call.id ?? call.name}`;
+      if (loggedTools.has(key)) continue;
+      loggedTools.add(key);
+      deps.logger.info(`run ${runId} → tool call: ${call.name}`);
+    }
+    for (const result of results) {
+      const key = `result:${result.id ?? result.name}`;
+      if (loggedTools.has(key)) continue;
+      loggedTools.add(key);
+      deps.logger.info(`run ${runId} ← tool result: ${result.name}`);
+    }
+  };
+  const logFinished = (status: RunStatus): void => {
+    if (!deps.logRunActivity) return;
+    deps.logger.info(
+      `run ${runId} ${status} in ${deps.clock().getTime() - startedAt}ms (${seq} frames)`,
+    );
+  };
+
   // Arm the optional wall-clock timeout; it aborts this run's signal with reason "timeout".
   const timer =
     deps.runTimeoutMs !== undefined
@@ -154,6 +182,9 @@ export async function executeRun(deps: ResolvedDeps, exec: RunExecution): Promis
     // pending -> running: run row first (the concurrency source of truth), then the thread mirror.
     await deps.store.runs.setStatus(runId, "running");
     await mirrorThreadStatus(deps, threadId, "busy");
+    if (deps.logRunActivity) {
+      deps.logger.info(`run ${runId} started · assistant=${run.assistant_id} thread=${threadId}`);
+    }
 
     const assistant = await deps.store.assistants.get(run.assistant_id);
     if (!assistant) {
@@ -167,7 +198,9 @@ export async function executeRun(deps: ResolvedDeps, exec: RunExecution): Promis
     const stream = await graph.stream(input, options as unknown as StreamOptions);
     for await (const chunk of stream) {
       seq += 1;
-      await deps.bus.publish(runId, toRunFrame(seq, chunkToFrameBody(chunk)));
+      const body = chunkToFrameBody(chunk);
+      await deps.bus.publish(runId, toRunFrame(seq, body));
+      if (deps.logRunActivity) logToolActivity(body.data);
     }
 
     // A cancel/timeout may have raced in while the graph was finishing (an uninterruptible node can
@@ -178,6 +211,7 @@ export async function executeRun(deps: ResolvedDeps, exec: RunExecution): Promis
       const finalStatus = await finalizeRun(deps, runId, timedOut ? "timeout" : "error");
       if (finalStatus === "timeout") await mirrorThreadError(deps, threadId, "Run timed out.");
       else if (finalStatus === "error") await mirrorThreadStatus(deps, threadId, "idle");
+      logFinished(finalStatus);
       return { status: finalStatus, values: {} as DefaultValues };
     }
 
@@ -190,18 +224,27 @@ export async function executeRun(deps: ResolvedDeps, exec: RunExecution): Promis
     } else {
       await mirrorThreadStatus(deps, threadId, finalStatus === "error" ? "error" : "idle");
     }
+    if (deps.logRunActivity && finalStatus === "interrupted") {
+      const prompts = describeInterrupts(snapshot);
+      deps.logger.info(
+        `run ${runId} interrupted${prompts.length ? ` · awaiting: ${prompts.join("; ")}` : ""}`,
+      );
+    }
+    logFinished(finalStatus);
     return { status: finalStatus, values: snapshot.values as DefaultValues };
   } catch (error) {
     const reason = control.reason.current;
     if (reason === "timeout") {
       const finalStatus = await finalizeRun(deps, runId, "timeout");
       if (finalStatus === "timeout") await mirrorThreadError(deps, threadId, "Run timed out.");
+      logFinished(finalStatus);
       return { status: finalStatus, values: {} as DefaultValues };
     }
     if (reason === "cancel" || control.signal.aborted) {
       // A cancelled run is a terminal error, but the thread is free again (idle).
       const finalStatus = await finalizeRun(deps, runId, "error");
       if (finalStatus === "error") await mirrorThreadStatus(deps, threadId, "idle");
+      logFinished(finalStatus);
       return { status: finalStatus, values: {} as DefaultValues };
     }
     // Genuine graph error: surface it as the terminal frame, then persist error state.
@@ -210,6 +253,8 @@ export async function executeRun(deps: ResolvedDeps, exec: RunExecution): Promis
     await deps.bus.publish(runId, { seq, event: "error", data: serialized });
     const finalStatus = await finalizeRun(deps, runId, "error");
     if (finalStatus === "error") await mirrorThreadError(deps, threadId, serialized.message);
+    if (deps.logRunActivity) deps.logger.error(`run ${runId} error: ${serialized.message}`);
+    logFinished(finalStatus);
     return { status: finalStatus, values: {} as DefaultValues };
   } finally {
     if (timer !== undefined) clearTimeout(timer);

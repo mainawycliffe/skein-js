@@ -62,6 +62,12 @@ export interface ProtocolDeps {
   clock?: Clock;
   /** Structured logger; defaults to a no-op. */
   logger?: Logger;
+  /**
+   * When true, the run engine logs per-run activity — start/finish (with status + duration), each
+   * tool call and tool result, and interrupts — through {@link logger}. Off by default; `skein dev
+   * --verbose` turns it on. Zero cost when off (the engine skips the stream inspection entirely).
+   */
+  logRunActivity?: boolean;
   /** Optional per-run wall-clock timeout in ms. When set, a run exceeding it becomes `"timeout"`. */
   runTimeoutMs?: number;
   /**

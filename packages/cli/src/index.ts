@@ -56,6 +56,7 @@ program
   // Develop against production-shaped storage without Docker (needs DATABASE_URL / REDIS_URL).
   .option("--store <driver>", "Store driver: memory | postgres", parseStore, "memory")
   .option("--queue <driver>", "Queue driver: memory | redis", parseQueue, "memory")
+  .option("-v, --verbose", "Log per-run activity: start/finish, tool calls, and interrupts")
   .action((options) => runDev(options));
 
 program
