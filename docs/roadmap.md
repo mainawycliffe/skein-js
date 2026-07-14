@@ -32,6 +32,12 @@ Priority order (**bold = MVP**):
 9. **Storage-postgres + pgvector** — `SkeinStore` over `pg` + `PostgresSaver`; semantic
    store search; migrations.
 10. **CLI — `up` / `build` / `dockerfile`** — Docker Compose (Postgres + Redis); image build.
+    - **Once the Postgres + Redis drivers exist (steps 8–9), extend `skein dev` to optionally use
+      them** (e.g. `--store postgres` / `--queue redis`, or a `dev` block in `langgraph.json`),
+      instead of always the in-memory drivers. This is a capability `langgraph dev` does **not**
+      offer — it lets you develop and test against production-shaped storage (durable checkpoints,
+      cross-instance streaming, pgvector search) without `skein up`/full Docker. `skein dev` already
+      builds its runtime through the injectable `{ deps }` seam, so this is wiring, not rearchitecting.
 11. **Fastify + NestJS adapters** — reuse the same core handler table.
 
 ## Post-MVP / non-goals for v1
@@ -40,6 +46,14 @@ Priority order (**bold = MVP**):
 - Cron / scheduling.
 - `skein deploy` to a hosted platform.
 - Full OpenTelemetry observability.
+- **`@skein-js/nextjs` adapter** — mount the Agent Protocol inside an existing Next.js app via a
+  single App Router catch-all route. The transport-neutral handler table already fits: `ProtocolRequest`
+  is a plain `{ params, query, body, headers }` and the SSE `ProtocolResponse` is an
+  `AsyncIterable<string>` that maps directly onto a Web `ReadableStream`, so it's a thin adapter like
+  Express. **Caveat:** the background run worker (and the in-memory driver's shared state) need a
+  long-lived Node process — fine on `next start`, but serverless/edge deploys require the Redis queue
+  and Postgres store (steps 8–9) with `runtime = 'nodejs'`. Complementary to `skein dev` (which is the
+  standalone dev server), not a replacement.
 
 ## Verification
 
