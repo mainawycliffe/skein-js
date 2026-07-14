@@ -1,0 +1,19 @@
+{
+  "node_version": "20",
+  "graphs": {
+    "research": "./src/research-agent.ts:graph"
+  },
+  "env": ".env",
+  "store": {
+    "index": {
+      "embed": "google_genai:text-embedding-004",
+      "dims": 768,
+      "fields": ["content"]
+    }
+  },
+  "http": {
+    "cors": {
+      "allow_origins": ["http://localhost:3005"]
+    }
+  }
+}
