@@ -55,6 +55,21 @@ Steps 1–10 below are complete: the dev loop **and** self-hosted production bot
 11. **Fastify + NestJS adapters** — reuse the same core handler table (Express ships today). This is
     the one open MVP item.
 
+## Shipped beyond the original plan
+
+- ✅ **Authentication + authorization (LangGraph parity)** — custom auth via a `langgraph.json`
+  `auth` block that loads a `@langchain/langgraph-sdk/auth` `Auth` instance. Transport-neutral (in
+  [`@skein-js/agent-protocol`](../packages/agent-protocol), so every adapter inherits it): each
+  request is authenticated (`401`) and authorized per resource + action (`403`), with `@auth.on.*`
+  ownership filters scoping reads (non-owned → `404`) and stamping writes. Honors
+  `disable_studio_auth`. Reuses the SDK's `Auth` contract + langgraph-api's `isAuthMatching`; only
+  the instance-scoped dispatch is reimplemented (langgraph-api's `registerAuth` is module-global).
+  See [agent-protocol.md](./agent-protocol.md#authentication--authorization). **Follow-up (scale):**
+  push ownership filters into SQL on the Postgres driver (today filtering is in-process after a
+  fetch — correct at any size, but lists all rows first); per-owner scoping of `assistants` and
+  `store` (both gate-only today — assistants are auto-registered without an owner and store rows
+  carry no metadata).
+
 ## Post-MVP / non-goals for v1
 
 - WebSocket streaming transport (SSE covers the client UX; **does not affect the React SDK**).

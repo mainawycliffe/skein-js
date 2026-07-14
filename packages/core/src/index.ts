@@ -58,4 +58,15 @@ export { serializeWireJson } from "./wire/serialize-wire-json.js";
 
 // Edge error type.
 export { isSkeinHttpError, SkeinHttpError } from "./errors/skein-http-error.js";
+
+// Authentication + authorization contract (the injectable engine consulted per request).
+export type {
+  AuthAction,
+  AuthContext,
+  AuthEngine,
+  AuthFilters,
+  AuthFilterValue,
+  AuthResource,
+  AuthUser,
+} from "./auth/auth.js";
 export type { SkeinHttpErrorOptions } from "./errors/skein-http-error.js";

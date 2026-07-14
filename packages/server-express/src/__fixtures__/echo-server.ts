@@ -5,6 +5,7 @@
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import { type CompiledGraph, MemorySaver, MessagesAnnotation, StateGraph } from "@langchain/langgraph";
 import type { GraphResolver, GraphSchemas, ProtocolDeps } from "@skein-js/agent-protocol";
+import type { AuthEngine } from "@skein-js/core";
 import { MemoryRunEventBus, MemoryRunQueue, MemorySkeinStore } from "@skein-js/storage-memory";
 import type { CorsOptions } from "cors";
 
@@ -34,14 +35,15 @@ export function createEchoResolver(): GraphResolver {
   };
 }
 
-/** In-memory `ProtocolDeps` around the echo graph. */
-export function createEchoDeps(): ProtocolDeps {
+/** In-memory `ProtocolDeps` around the echo graph, optionally with an auth engine. */
+export function createEchoDeps(auth?: AuthEngine): ProtocolDeps {
   return {
     store: new MemorySkeinStore(),
     graphs: createEchoResolver(),
     queue: new MemoryRunQueue(),
     bus: new MemoryRunEventBus(),
     checkpointer: new MemorySaver(),
+    auth,
   };
 }
 
@@ -55,9 +57,9 @@ export interface RunningServer {
 
 /** Boot the echo server on an ephemeral loopback port. `cors` is off unless explicitly enabled. */
 export async function startEchoServer(
-  options: { cors?: boolean | CorsOptions } = {},
+  options: { cors?: boolean | CorsOptions; auth?: AuthEngine } = {},
 ): Promise<RunningServer> {
-  const server = await createExpressServer({ deps: createEchoDeps(), cors: options.cors });
+  const server = await createExpressServer({ deps: createEchoDeps(options.auth), cors: options.cors });
   const httpServer = await server.listen(0, "127.0.0.1");
   const address = httpServer.address();
   if (address === null || typeof address === "string") {

@@ -25,6 +25,10 @@ import {
 
 /** A normalized request an adapter maps its framework request onto. */
 export interface ProtocolRequest {
+  /** HTTP method (e.g. `"POST"`), used to synthesize the WHATWG `Request` an auth handler receives. */
+  method: string;
+  /** Absolute request URL, so a synthesized `Request` carries the path + query an auth handler reads. */
+  url: string;
   params: Record<string, string>;
   query: Record<string, string | string[] | undefined>;
   body: unknown;

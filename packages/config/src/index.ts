@@ -18,5 +18,8 @@ export type {
 
 export { parseEnvFile, resolveEnv } from "./resolve-env.js";
 
+export { loadAuthEngine } from "./auth-engine.js";
+export type { AuthConfig, LoadAuthEngineOptions } from "./auth-engine.js";
+
 export { SkeinConfigError } from "./errors.js";
 export type { SkeinConfigErrorOptions } from "./errors.js";

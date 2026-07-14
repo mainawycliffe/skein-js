@@ -19,6 +19,10 @@ function toSingleValueHeaders(headers: IncomingHttpHeaders): Record<string, stri
 /** Translate an Express `Request` into the normalized `ProtocolRequest` the handler table consumes. */
 export function toProtocolRequest(req: Request): ProtocolRequest {
   return {
+    method: req.method,
+    // Absolute URL so a synthesized WHATWG `Request` carries the path + query string; an auth
+    // handler may read either. `req.originalUrl` includes the query, unlike `req.path`.
+    url: `${req.protocol}://${req.get("host") ?? "localhost"}${req.originalUrl}`,
     // Express 5 types params as `string | string[]`, but the protocol's routes use single named
     // params only, so the narrower `Record<string, string>` holds.
     params: req.params as Record<string, string>,

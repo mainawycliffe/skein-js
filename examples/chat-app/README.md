@@ -77,6 +77,28 @@ pnpm exec skein dev --port 2024 --store postgres
 (`google_genai:text-embedding-004`) and enables pgvector search. Memories now survive restarts and
 recall ranks by semantic similarity.
 
+## Authentication (optional)
+
+[`src/auth.ts`](./src/auth.ts) is a LangGraph-style [`Auth`](https://langchain-ai.github.io/langgraphjs/)
+handler, referenced from [`langgraph.json`](./langgraph.json)'s `auth` block. skein applies it to
+every request across the whole Agent Protocol surface — the same custom-auth model as LangGraph
+Platform.
+
+It's frictionless by default: with no `SKEIN_API_KEY` set the server is open. Set one to require an
+`X-Api-Key` header:
+
+```bash
+# backend
+export SKEIN_API_KEY=some-secret
+pnpm exec skein dev --port 2024
+
+# frontend — send the key from the browser (useStream({ apiKey }))
+echo 'NEXT_PUBLIC_SKEIN_API_KEY=some-secret' >> .env.local
+```
+
+Requests without a valid key get `401`; every caller's threads and runs are scoped to them
+(`@auth.on("threads")` returns an `owner` filter), so one user can't read or mutate another's.
+
 ## Tests
 
 ```bash

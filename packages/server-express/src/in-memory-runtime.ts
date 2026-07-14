@@ -5,7 +5,7 @@
 
 import { MemorySaver } from "@langchain/langgraph";
 import type { GraphResolver, GraphSchemas, ProtocolDeps } from "@skein-js/agent-protocol";
-import { loadConfig, type GraphRegistry, type ModuleImporter } from "@skein-js/config";
+import { loadAuthEngine, loadConfig, type GraphRegistry, type ModuleImporter } from "@skein-js/config";
 import { MemoryRunEventBus, MemoryRunQueue, MemorySkeinStore } from "@skein-js/storage-memory";
 import type { CorsOptions } from "cors";
 
@@ -55,9 +55,11 @@ export async function loadInMemoryRuntime(
   configPath: string,
   importModule?: ModuleImporter,
 ): Promise<InMemoryRuntimeConfig> {
-  const { graphs, config } = await loadConfig({ configPath, importModule });
+  const { graphs, config, configDir } = await loadConfig({ configPath, importModule });
+  const deps = buildInMemoryDeps(toGraphResolver(graphs));
+  deps.auth = await loadAuthEngine(config.auth, { configDir, importModule });
   return {
-    deps: buildInMemoryDeps(toGraphResolver(graphs)),
+    deps,
     cors: corsFromHttpConfig(config.http),
   };
 }
@@ -105,6 +107,7 @@ export async function loadReloadableInMemoryRuntime(
     queue: new MemoryRunQueue(),
     bus: new MemoryRunEventBus(),
     checkpointer,
+    auth: await loadAuthEngine(first.config.auth, { configDir: first.configDir, importModule }),
   };
 
   return {

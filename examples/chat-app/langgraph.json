@@ -3,6 +3,9 @@
   "graphs": {
     "research": "./src/research-agent.ts:graph"
   },
+  "auth": {
+    "path": "./src/auth.ts:auth"
+  },
   "env": ".env",
   "store": {
     "index": {

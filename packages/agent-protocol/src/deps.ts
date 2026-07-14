@@ -5,7 +5,7 @@
 // this package never has to know `@skein-js/config` exists.
 
 import type { BaseCheckpointSaver, CompiledGraph } from "@langchain/langgraph";
-import type { GraphSchema, RunEventBus, RunQueue, SkeinStore } from "@skein-js/core";
+import type { AuthEngine, GraphSchema, RunEventBus, RunQueue, SkeinStore } from "@skein-js/core";
 
 /** A factory export: called (optionally with per-run config) to produce a compiled graph. */
 export type CompiledGraphFactory = (config: {
@@ -64,6 +64,12 @@ export interface ProtocolDeps {
   logger?: Logger;
   /** Optional per-run wall-clock timeout in ms. When set, a run exceeding it becomes `"timeout"`. */
   runTimeoutMs?: number;
+  /**
+   * Optional auth engine. When set, every request is authenticated (401 on failure) and authorized
+   * per resource + action (403 on deny), with ownership filters scoping reads and stamping writes.
+   * Absent means no authentication/authorization — every request is allowed (the current behavior).
+   */
+  auth?: AuthEngine;
 }
 
 const noopLogger: Logger = {

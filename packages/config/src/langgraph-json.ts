@@ -30,6 +30,19 @@ export const langgraphJsonSchema = z
     checkpointer: z.object({ type: z.string() }).passthrough().optional(),
     /** Server customization (CORS, route toggles) applied by the framework adapter. */
     http: z.object({}).passthrough().optional(),
+    /**
+     * Custom authentication + authorization. `path` is a `"file:export"` spec pointing at a module
+     * that default-exports (or named-exports) an `@langchain/langgraph-sdk/auth` `Auth` instance;
+     * when absent, every request is allowed (unauthenticated — the current behavior). Matches the
+     * LangGraph CLI's `auth` block, including `disable_studio_auth`.
+     */
+    auth: z
+      .object({
+        path: z.string(),
+        disable_studio_auth: z.boolean().optional().default(false),
+      })
+      .passthrough()
+      .optional(),
     /** Extra lines appended by `skein dockerfile` / `build`. */
     dockerfile_lines: z.array(z.string()).optional(),
     /** Dependency hints for image builds. */

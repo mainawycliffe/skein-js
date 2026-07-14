@@ -89,6 +89,54 @@ Priority for v1 is marked **✅ MVP**. Deferred items are noted.
 - Responses carry status (`pending` / `success` / `error`), timestamps, and resource IDs.
 - Schemas use JSON Schema for interoperability.
 
+## Authentication + authorization
+
+Auth is **transport-neutral**: it lives in `@skein-js/agent-protocol`, wrapping the handler table
+every adapter mounts, so Express / Fastify / Nest inherit it identically. It is active only when a
+`langgraph.json` `auth` block loads an `Auth` instance (see
+[langgraph-cli-compat.md](./langgraph-cli-compat.md#authentication--authorization)); otherwise the
+server is unauthenticated.
+
+Per request the wrapper:
+
+1. **Authenticates** — synthesizes a WHATWG `Request` (method, URL, headers) and runs the user's
+   `authenticate` handler → an `AuthContext` (`{ user, scopes }`), or `401` if it throws. Studio
+   traffic (`x-auth-scheme: langsmith`) is admitted without authenticating unless
+   `disable_studio_auth` is set.
+2. **Authorizes** — looks up the route's resource + action, runs the matching `@auth.on.*` handler
+   (priority: `resource:action` → `resource` → `*:action` → `*`) → `403` on `false`, else ownership
+   **filters**.
+3. **Dispatches** — when filters were returned, through a per-request service whose `SkeinStore` is
+   an auth-scoped decorator closed over those filters (the shared cancellation registry + thread
+   locks are reused; only the store is swapped). The decorator filters reads (a non-owned row reads
+   as absent → `404`, never `403`), and stamps the filter's values onto created rows so later reads
+   match. It scopes only the `threads` family — threads + their runs (runs inherit their thread's
+   owner). `assistants` and `store` are gate-only: their `@auth.on.*` handlers can deny (`403`), but
+   no ownership filter is applied — graph assistants are auto-registered with no owner and must stay
+   visible to run, and store items carry no metadata to filter on (per-owner scoping of both is a
+   Depth-2 follow-up).
+
+Route → resource/action (runs authorize through their owning thread — there is no `runs` resource):
+
+| Endpoint(s)                                                                       | resource\:action                                |
+| --------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `GET /assistants/{id}`, `/assistants/{id}/schemas`                                | `assistants:read`                               |
+| `POST /assistants/search`                                                         | `assistants:search`                             |
+| `POST /threads`                                                                   | `threads:create`                                |
+| `GET /threads/{id}`, `/state`, `/history`; `GET .../runs`, `/runs/{id}`, run join | `threads:read`                                  |
+| `POST /threads/search`                                                            | `threads:search`                                |
+| `PATCH /threads/{id}`; run cancel                                                 | `threads:update`                                |
+| `DELETE /threads/{id}`; run delete                                                | `threads:delete`                                |
+| run create (wait/stream/background), thread stream / commands                     | `threads:create_run`                            |
+| `PUT/GET/DELETE /store/items`, `/store/items/search`, `/store/namespaces`         | `store:{put,get,delete,search,list_namespaces}` |
+
+**Reuse & limits.** The `Auth` contract and the pure `isAuthMatching` filter semantics
+(`$eq`/`$contains`) come from `@langchain/*`; skein reimplements only the small, instance-scoped
+dispatch (langgraph-api's `registerAuth` is module-global, which skein's DI design avoids). Store
+items carry no metadata, so `store:*` handlers can deny/allow but ownership *filtering* of store
+items is deferred; ownership filtering is applied in-process after a fetch (correct at any scale,
+with a SQL-pushdown follow-up on the roadmap for large tenants).
+
 ## Conformance strategy
 
 The official [`@langchain/langgraph-sdk`](./react-sdk.md) client is our **conformance

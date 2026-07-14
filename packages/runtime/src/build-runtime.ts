@@ -10,7 +10,12 @@
 import { MemorySaver } from "@langchain/langgraph";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import type { GraphResolver, GraphSchemas, ProtocolDeps } from "@skein-js/agent-protocol";
-import { loadConfig, type GraphRegistry, type ModuleImporter } from "@skein-js/config";
+import {
+  loadAuthEngine,
+  loadConfig,
+  type GraphRegistry,
+  type ModuleImporter,
+} from "@skein-js/config";
 import {
   corsFromHttpConfig,
   loadReloadableInMemoryRuntime,
@@ -170,6 +175,10 @@ export async function buildRuntime(options: BuildRuntimeOptions): Promise<SkeinR
       queue: runQueue,
       bus,
       checkpointer,
+      auth: await loadAuthEngine(first.config.auth, {
+        configDir: first.configDir,
+        importModule,
+      }),
     };
 
     return {

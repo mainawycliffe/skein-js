@@ -74,6 +74,12 @@ it but is never required.
     // custom user routes may be attached here in a later iteration
   },
 
+  // custom authentication + authorization (see below)
+  "auth": {
+    "path": "./src/auth.ts:auth", // a "@langchain/langgraph-sdk/auth" `Auth` instance
+    "disable_studio_auth": false,
+  },
+
   // extra Dockerfile lines appended after the base image
   "dockerfile_lines": [],
 }
@@ -89,6 +95,7 @@ it but is never required.
 | `store`                | `store.index.{embed,dims,fields}` configures pgvector semantic search on the Postgres driver — see [storage.md](./storage.md).                                   |
 | `checkpointer`         | `"default"` → `PostgresSaver`; dev falls back to an in-memory `MemorySaver`.                                                                                     |
 | `http`                 | CORS + `disable_*` route flags applied by the framework adapter.                                                                                                 |
+| `auth`                 | `auth.path` loads an `Auth` from `@langchain/langgraph-sdk/auth`; every request is authenticated + authorized; `disable_studio_auth` honored.                    |
 | `dockerfile_lines`     | Appended by `skein dockerfile` / `skein build`.                                                                                                                  |
 
 ## Graph loading (`path:export` notation)
@@ -102,6 +109,39 @@ it but is never required.
 
 This is the same contract LangGraph.js users already write against, so **no code changes
 are required** to move a project onto skein-js.
+
+## Authentication + authorization (`auth`)
+
+skein-js implements LangGraph's **custom-auth** model. Point `auth.path` at a module exporting a
+[`@langchain/langgraph-sdk/auth`](https://www.npmjs.com/package/@langchain/langgraph-sdk) `Auth`
+instance — the same class LangGraph Platform uses, so an existing auth file is drop-in:
+
+```ts
+import { Auth, HTTPException } from "@langchain/langgraph-sdk/auth";
+
+export const auth = new Auth()
+  .authenticate(async (request) => {
+    const token = request.headers.get("authorization")?.replace(/^Bearer /, "");
+    const user = token ? await verify(token) : undefined;
+    if (!user) throw new HTTPException(401, { message: "Unauthorized" });
+    return { identity: user.id, permissions: user.scopes }; // becomes ctx.user
+  })
+  .on("threads", ({ user }) => ({ owner: user.identity })); // scope threads (and their runs) by owner
+```
+
+- `.authenticate(...)` runs on every request; throwing an `HTTPException` (or returning nothing) is a
+  `401`. Its return becomes the `user` passed to the `.on(...)` handlers.
+- `.on("<resource>:<action>", ...)` (or a broader `"threads"` / `"*"`) authorizes each operation:
+  return `false` for a `403`, or a **filter** object to scope the resource. A returned filter both
+  hides other owners' rows on reads and stamps ownership onto new rows. Runs authorize through their
+  owning thread (there is no separate `runs` resource), matching LangGraph.
+- **No `auth` block** → the server is fully open (unauthenticated), exactly as before.
+- `disable_studio_auth: false` (the default) lets LangGraph Studio traffic
+  (`x-auth-scheme: langsmith`) through without authenticating, so local dev stays frictionless; set
+  it to `true` to require real credentials from everyone.
+
+See [agent-protocol.md](./agent-protocol.md#authentication--authorization) for the full request
+lifecycle and the route → resource/action map.
 
 ## `dev` vs `up`
 

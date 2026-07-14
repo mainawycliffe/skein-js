@@ -31,6 +31,16 @@ export class SkeinHttpError extends Error {
     return new SkeinHttpError(400, message, options);
   }
 
+  /** 401 — the caller is not authenticated (no/invalid credentials for the configured auth). */
+  static unauthorized(message: string, options?: SkeinHttpErrorOptions): SkeinHttpError {
+    return new SkeinHttpError(401, message, options);
+  }
+
+  /** 403 — the caller is authenticated but not permitted to perform this action. */
+  static forbidden(message: string, options?: SkeinHttpErrorOptions): SkeinHttpError {
+    return new SkeinHttpError(403, message, options);
+  }
+
   /** 404 — the addressed resource does not exist. */
   static notFound(message: string, options?: SkeinHttpErrorOptions): SkeinHttpError {
     return new SkeinHttpError(404, message, options);

@@ -2,6 +2,7 @@
 // worker from ONE shared context. Sharing matters — the service's `cancel` and the worker both
 // touch the same cancellation registry, so cancelling a background run actually aborts it.
 
+import { createAuthorizingHandlers } from "./auth/authorizing-handlers.js";
 import { createContext } from "./context.js";
 import { createProtocolHandlers, type ProtocolHandlers } from "./create-handlers.js";
 import type { ProtocolDeps } from "./deps.js";
@@ -29,9 +30,14 @@ export function createProtocolRuntime(
 ): ProtocolRuntime {
   const context = createContext(deps);
   const service = buildProtocolService(context);
+  // When an auth engine is injected, every request is authenticated + authorized through one
+  // transport-neutral seam; without it, the handler table is unchanged (unauthenticated, as before).
+  const handlers = deps.auth
+    ? createAuthorizingHandlers(context, deps.auth)
+    : createProtocolHandlers(service);
   return {
     service,
-    handlers: createProtocolHandlers(service),
+    handlers,
     worker: createRunWorker(context, options.worker),
   };
 }

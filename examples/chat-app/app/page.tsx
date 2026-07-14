@@ -16,6 +16,9 @@ import { answerText, roleOf, thinkingText, toolCalls, toolResultsByCall } from "
 
 const API_URL = process.env["NEXT_PUBLIC_SKEIN_URL"] ?? "http://localhost:2024";
 const ASSISTANT_ID = process.env["NEXT_PUBLIC_SKEIN_ASSISTANT_ID"] ?? "research";
+// Sent as the `X-Api-Key` header. Only enforced when the server sets `SKEIN_API_KEY` (see src/auth.ts);
+// left undefined for the open local demo.
+const API_KEY = process.env["NEXT_PUBLIC_SKEIN_API_KEY"];
 
 const EXAMPLE_PROMPTS = [
   "Research the latest on WebGPU and summarize the state of browser support.",
@@ -41,6 +44,7 @@ export default function Page() {
 
   const thread = useStream({
     apiUrl: API_URL,
+    apiKey: API_KEY,
     assistantId: ASSISTANT_ID,
     threadId,
     onThreadId: (id) => {

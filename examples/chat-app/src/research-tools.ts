@@ -125,7 +125,7 @@ function memoryContent(item: { value: Record<string, unknown> }): string {
   return String((item.value as { content?: unknown }).content ?? "");
 }
 
-/** The demo has no auth; a thread can still scope memory by passing `configurable.user_id`. */
+/** Memory is scoped per `configurable.user_id`; auth (src/auth.ts) maps the caller to this same id. */
 function userIdFrom(config: LangGraphRunnableConfig): string {
   const configured = config.configurable?.["user_id"];
   return typeof configured === "string" && configured.length > 0 ? configured : "demo-user";
