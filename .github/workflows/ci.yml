@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same ref cancels an in-flight run — no point finishing stale checks.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm before setup-node, so setup-node's pnpm store cache has a package manager to key on.
+      # The version comes from package.json's `packageManager` field.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Cache Nx's computation cache across runs so unchanged projects skip re-work.
+      - uses: actions/cache@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            nx-${{ runner.os }}-
+
+      - name: Prettier
+        run: pnpm format:check
+
+      - name: Lint, typecheck, test, build
+        run: pnpm exec nx run-many -t lint typecheck test build --output-style=stream
+
+  integration:
+    name: integration tests (Testcontainers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/cache@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            nx-${{ runner.os }}-
+
+      # ubuntu-latest ships Docker, which Testcontainers uses to spin up Postgres + Redis.
+      - name: Integration tests
+        run: pnpm exec nx run-many -t test-integration --output-style=stream
