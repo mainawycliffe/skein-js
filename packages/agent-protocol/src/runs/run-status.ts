@@ -1,8 +1,9 @@
 // The run/thread status state machine, kept pure so it can be reasoned about and tested in
 // isolation. A run moves pending -> running -> one of the terminal statuses; the owning thread's
 // cosmetic status is mirrored from the run's. Vocabulary is fixed by the wire types:
-//   RunStatus    = pending | running | success | error | timeout | interrupted
+//   RunStatus    = pending | running | success | error | timeout | interrupted | cancelled
 //   ThreadStatus = idle | busy | interrupted | error
+// (`cancelled` is skein's deliberate widening of the SDK union — see packages/core/src/wire.)
 
 import { isTerminalRunStatus, type RunStatus, type ThreadStatus } from "@skein-js/core";
 
@@ -16,9 +17,11 @@ export function threadStatusForRun(status: RunStatus): ThreadStatus {
     case "error":
     case "timeout":
       return "error";
-    // pending (not yet started) and success both leave the thread idle.
+    // pending (not yet started), success, and cancelled all leave the thread idle. A cancellation
+    // is a clean stop, not a failure, so the thread returns to idle rather than error.
     case "pending":
     case "success":
+    case "cancelled":
       return "idle";
     default:
       return "idle";

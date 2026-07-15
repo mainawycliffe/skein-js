@@ -38,6 +38,7 @@ export const skeinRoutes: readonly RouteBinding[] = [
   // threads
   { method: "post", path: "/threads/search", handler: "listThreads" },
   { method: "post", path: "/threads", handler: "createThread" },
+  { method: "post", path: "/threads/:thread_id/copy", handler: "copyThread" },
   { method: "get", path: "/threads/:thread_id", handler: "getThread" },
   { method: "patch", path: "/threads/:thread_id", handler: "patchThread" },
   { method: "delete", path: "/threads/:thread_id", handler: "deleteThread" },
@@ -123,7 +124,9 @@ export function createHandlerRouter(
     router[binding.method](binding.path, async (req: Request, res: Response) => {
       try {
         const request = toProtocolRequest(req);
-        const response = await invoke(binding.foldThreadIdIntoBody ? foldThreadId(request) : request);
+        const response = await invoke(
+          binding.foldThreadIdIntoBody ? foldThreadId(request) : request,
+        );
         await sendProtocolResponse(response, res);
       } catch (error) {
         sendErrorResponse(error, res, options.logger);

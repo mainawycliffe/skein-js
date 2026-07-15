@@ -1,12 +1,23 @@
 // The long-term memory store. A thin, validated pass-through to `SkeinStore.store` — the driver
 // owns behavior (the memory driver does a naive scan; the Postgres driver does pgvector search).
 
-import { SkeinHttpError, type Item, type SearchItem, type StoreSearchQuery } from "@skein-js/core";
+import {
+  SkeinHttpError,
+  type Item,
+  type SearchItem,
+  type StorePutOptions,
+  type StoreSearchQuery,
+} from "@skein-js/core";
 
 import type { ResolvedDeps } from "../deps.js";
 
 export interface StoreService {
-  put(namespace: string[], key: string, value: Record<string, unknown>): Promise<Item>;
+  put(
+    namespace: string[],
+    key: string,
+    value: Record<string, unknown>,
+    options?: StorePutOptions,
+  ): Promise<Item>;
   get(namespace: string[], key: string): Promise<Item>;
   delete(namespace: string[], key: string): Promise<void>;
   search(query: StoreSearchQuery): Promise<SearchItem[]>;
@@ -15,7 +26,7 @@ export interface StoreService {
 
 export function createStoreService(deps: ResolvedDeps): StoreService {
   return {
-    put: (namespace, key, value) => deps.store.store.put(namespace, key, value),
+    put: (namespace, key, value, options) => deps.store.store.put(namespace, key, value, options),
 
     async get(namespace, key) {
       const item = await deps.store.store.get(namespace, key);

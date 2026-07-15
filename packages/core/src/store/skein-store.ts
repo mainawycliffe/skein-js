@@ -64,12 +64,62 @@ export interface ThreadUpdate {
   interrupts?: Record<string, Interrupt[]>;
 }
 
+/** Filter + pagination for `POST /threads/search`. Omitted fields don't constrain the result. */
+export interface ThreadSearchQuery {
+  /** Match threads whose metadata contains every one of these key/value pairs (subset match). */
+  metadata?: Metadata;
+  /** Match threads whose mirrored graph values contain every one of these key/value pairs. */
+  values?: DefaultValues;
+  /** Restrict to threads in this status. */
+  status?: ThreadStatus;
+  /** Restrict to these thread ids. */
+  ids?: string[];
+  limit?: number;
+  offset?: number;
+  /** Sort key; defaults to `created_at`. */
+  sortBy?: "thread_id" | "status" | "created_at" | "updated_at";
+  /** Sort direction; defaults to `desc`. */
+  sortOrder?: "asc" | "desc";
+}
+
 export interface ThreadRepo {
   list(): Promise<Thread[]>;
+  /** Filtered + paginated listing backing `POST /threads/search`. */
+  search(query: ThreadSearchQuery): Promise<Thread[]>;
   get(threadId: string): Promise<Thread | null>;
   create(input?: ThreadCreate): Promise<Thread>;
   update(threadId: string, patch: ThreadUpdate): Promise<Thread>;
+  /** Duplicate a thread's row (new id, fresh timestamps); checkpoint history is copied at the service layer. */
+  copy(threadId: string): Promise<Thread>;
   delete(threadId: string): Promise<void>;
+}
+
+/**
+ * True if `subject` contains `filter`, mirroring Postgres' JSONB `@>` operator so the memory driver,
+ * the conformance suite, and the Postgres driver all agree on metadata/values matching. Containment is
+ * recursive: an object matches on a *subset* of its keys (nested objects included), an array matches as
+ * a set (every filter element is contained in some subject element), and scalars match by equality. An
+ * empty (or absent) filter matches everything.
+ */
+export function isMetadataSubset(subject: unknown, filter: unknown): boolean {
+  if (filter === undefined || filter === null) return true;
+  return jsonbContains(subject, filter);
+}
+
+function jsonbContains(subject: unknown, filter: unknown): boolean {
+  // Scalars (and null): plain equality, like `'1'::jsonb @> '1'::jsonb`.
+  if (filter === null || typeof filter !== "object") return subject === filter;
+  // Array filter: every element must be contained in some element of the subject array (set semantics).
+  if (Array.isArray(filter)) {
+    if (!Array.isArray(subject)) return false;
+    return filter.every((wanted) => subject.some((candidate) => jsonbContains(candidate, wanted)));
+  }
+  // Object filter: match on a subset of keys, recursively. An empty object matches any value.
+  const entries = Object.entries(filter as Record<string, unknown>);
+  if (entries.length === 0) return true;
+  if (subject === null || typeof subject !== "object" || Array.isArray(subject)) return false;
+  const row = subject as Record<string, unknown>;
+  return entries.every(([key, value]) => key in row && jsonbContains(row[key], value));
 }
 
 // --- runs ---------------------------------------------------------------------------------
@@ -132,6 +182,7 @@ export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = [
   "error",
   "timeout",
   "interrupted",
+  "cancelled",
 ];
 
 /** True if `status` is terminal (the run is finished and no longer holds its thread). */
@@ -150,12 +201,39 @@ export interface StoreSearchQuery {
   offset?: number;
 }
 
+/**
+ * Expiry policy for long-term store items (from `langgraph.json` `store.ttl`). All durations are in
+ * minutes. A driver applies `defaultTtl` when a `put` gives no explicit `ttl`, refreshes an item's
+ * expiry on read when `refreshOnRead` is set, and a background sweeper (interval `sweepIntervalMinutes`)
+ * deletes expired rows via {@link StoreRepo.sweepExpired}.
+ */
+export interface StoreTtlConfig {
+  /** Default item lifetime in minutes when `put` doesn't pass its own `ttl`. */
+  defaultTtl?: number;
+  /** Extend an item's expiry when it is read. Defaults to true. */
+  refreshOnRead?: boolean;
+  /** Sweeper cadence in minutes. Defaults to 60. */
+  sweepIntervalMinutes?: number;
+}
+
+/** Per-`put` options. `ttl` (minutes) overrides the configured `defaultTtl` for this item. */
+export interface StorePutOptions {
+  ttl?: number;
+}
+
 export interface StoreRepo {
   get(namespace: string[], key: string): Promise<Item | null>;
-  put(namespace: string[], key: string, value: Record<string, unknown>): Promise<Item>;
+  put(
+    namespace: string[],
+    key: string,
+    value: Record<string, unknown>,
+    options?: StorePutOptions,
+  ): Promise<Item>;
   delete(namespace: string[], key: string): Promise<void>;
   search(query: StoreSearchQuery): Promise<SearchItem[]>;
   listNamespaces(prefix?: string[]): Promise<string[][]>;
+  /** Delete every expired item; returns how many were removed. No-op when TTL is unconfigured. */
+  sweepExpired(): Promise<number>;
 }
 
 // --- the store ----------------------------------------------------------------------------

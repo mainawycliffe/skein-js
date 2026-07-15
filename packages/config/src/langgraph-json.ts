@@ -16,6 +16,22 @@ const storeIndexSchema = z
   })
   .passthrough();
 
+/**
+ * `store.ttl` — expiry policy for long-term store items, matching LangGraph's store TTL config.
+ * `default_ttl` and `refresh_on_read` shape how items expire; `sweep_interval_minutes` sets how
+ * often the background sweeper deletes expired rows. All durations are in minutes.
+ */
+const storeTtlSchema = z
+  .object({
+    /** Default item lifetime in minutes when a `put` doesn't specify its own `ttl`. */
+    default_ttl: z.number().optional(),
+    /** Extend an item's expiry when it is read (default true). */
+    refresh_on_read: z.boolean().optional(),
+    /** How often the background sweeper runs, in minutes (default 60). */
+    sweep_interval_minutes: z.number().optional(),
+  })
+  .passthrough();
+
 export const langgraphJsonSchema = z
   .object({
     /** REQUIRED: map of graph id → "path:export". */
@@ -25,7 +41,10 @@ export const langgraphJsonSchema = z
     /** `.env` path or an inline map, loaded into `process.env` at boot. */
     env: z.union([z.string(), z.record(z.string())]).optional(),
     /** Long-term memory store config. */
-    store: z.object({ index: storeIndexSchema.optional() }).passthrough().optional(),
+    store: z
+      .object({ index: storeIndexSchema.optional(), ttl: storeTtlSchema.optional() })
+      .passthrough()
+      .optional(),
     /** Checkpointer backend; `"default"` == Postgres, absent == in-memory. */
     checkpointer: z.object({ type: z.string() }).passthrough().optional(),
     /** Server customization (CORS, route toggles) applied by the framework adapter. */

@@ -164,6 +164,8 @@ export async function buildRuntime(options: BuildRuntimeOptions): Promise<SkeinR
   };
 
   try {
+    // Store-item TTL from langgraph.json `store.ttl` (snake_case on the wire → camelCase config).
+    const storeTtl = resolveStoreTtl(first.config.store?.ttl);
     const { skeinStore, checkpointer } = await (async () => {
       if (store === "postgres") {
         const databaseUrl = requireEnv("DATABASE_URL", "postgres");
@@ -177,6 +179,7 @@ export async function buildRuntime(options: BuildRuntimeOptions): Promise<SkeinR
         const connectionOptions = postgresConnectionOptions();
         const pgStore = await PostgresSkeinStore.connect(databaseUrl, {
           ...(index ? { index } : {}),
+          ...(storeTtl ? { ttl: storeTtl } : {}),
           ...connectionOptions,
         });
         disposers.push(() => pgStore.close());
@@ -187,8 +190,26 @@ export async function buildRuntime(options: BuildRuntimeOptions): Promise<SkeinR
         await saver.setup();
         return { skeinStore: pgStore, checkpointer: saver };
       }
-      return { skeinStore: new MemorySkeinStore(), checkpointer: new MemorySaver() };
+      return {
+        skeinStore: new MemorySkeinStore(storeTtl ? { ttl: storeTtl } : undefined),
+        checkpointer: new MemorySaver(),
+      };
     })();
+
+    // When TTL is configured, sweep expired store items on a background interval (default 60 min).
+    // `unref()` so the timer never keeps the process alive; the disposer stops it on shutdown. The
+    // sweep is caught so a transient DB error is logged, never surfaced as an unhandled rejection that
+    // could take the process down.
+    if (storeTtl) {
+      const everyMs = (storeTtl.sweepIntervalMinutes ?? 60) * 60_000;
+      const sweeper = setInterval(() => {
+        skeinStore.store.sweepExpired().catch((error) => {
+          console.error("skein: store TTL sweep failed", error);
+        });
+      }, everyMs);
+      sweeper.unref();
+      disposers.push(async () => clearInterval(sweeper));
+    }
 
     const { runQueue, bus } = (() => {
       if (queue === "redis") {
@@ -226,4 +247,23 @@ export async function buildRuntime(options: BuildRuntimeOptions): Promise<SkeinR
     await disposeAll();
     throw error;
   }
+}
+
+/**
+ * Map the langgraph.json `store.ttl` block (snake_case, minutes) to the driver's camelCase
+ * {@link StoreTtlConfig}. Returns undefined when no TTL field is set, so stores default to no expiry.
+ */
+function resolveStoreTtl(
+  raw:
+    | { default_ttl?: number; refresh_on_read?: boolean; sweep_interval_minutes?: number }
+    | undefined,
+): { defaultTtl?: number; refreshOnRead?: boolean; sweepIntervalMinutes?: number } | undefined {
+  if (!raw) return undefined;
+  const ttl: { defaultTtl?: number; refreshOnRead?: boolean; sweepIntervalMinutes?: number } = {};
+  if (typeof raw.default_ttl === "number") ttl.defaultTtl = raw.default_ttl;
+  if (typeof raw.refresh_on_read === "boolean") ttl.refreshOnRead = raw.refresh_on_read;
+  if (typeof raw.sweep_interval_minutes === "number") {
+    ttl.sweepIntervalMinutes = raw.sweep_interval_minutes;
+  }
+  return Object.keys(ttl).length > 0 ? ttl : undefined;
 }

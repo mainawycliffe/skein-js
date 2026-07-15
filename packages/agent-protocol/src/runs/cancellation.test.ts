@@ -19,17 +19,17 @@ async function serviceWithAssistants(deps = createFixtureDeps()) {
 }
 
 describe("cancellation", () => {
-  it("cancels a running stream: terminal error, thread freed, stream completes", async () => {
+  it("cancels a running stream: terminal cancelled, thread freed, stream completes", async () => {
     const service = await serviceWithAssistants();
     const { runId, frames } = await service.runs.createStream({ assistant_id: "slow", input: {} });
     await tick();
 
     const cancelled = await service.runs.cancel(runId);
-    expect(cancelled.status).toBe("error");
+    expect(cancelled.status).toBe("cancelled");
 
     await collect(frames); // completes once the engine closes the bus
     const run = await service.runs.get(runId);
-    expect(run.status).toBe("error");
+    expect(run.status).toBe("cancelled");
     expect((await service.threads.get(run.thread_id)).status).toBe("idle");
   });
 
@@ -54,14 +54,14 @@ describe("cancellation", () => {
     });
 
     const cancelled = await service.runs.cancel(run.run_id);
-    expect(cancelled.status).toBe("error");
+    expect(cancelled.status).toBe("cancelled");
 
-    // The job is still queued, but terminal — a running worker consumes and skips it (stays error).
+    // The job is still queued, but terminal — a running worker consumes and skips it (stays cancelled).
     const worker = createRunWorker(ctx);
     worker.start();
     try {
       await tick(80);
-      expect((await service.runs.get(run.run_id)).status).toBe("error");
+      expect((await service.runs.get(run.run_id)).status).toBe("cancelled");
     } finally {
       await worker.stop();
     }

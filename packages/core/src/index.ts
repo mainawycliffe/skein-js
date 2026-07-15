@@ -35,13 +35,20 @@ export type {
   RunRepo,
   SkeinStore,
   SkeinStoreSnapshot,
+  StorePutOptions,
   StoreRepo,
   StoreSearchQuery,
+  StoreTtlConfig,
   ThreadCreate,
   ThreadRepo,
+  ThreadSearchQuery,
   ThreadUpdate,
 } from "./store/skein-store.js";
-export { isTerminalRunStatus, TERMINAL_RUN_STATUSES } from "./store/skein-store.js";
+export {
+  isMetadataSubset,
+  isTerminalRunStatus,
+  TERMINAL_RUN_STATUSES,
+} from "./store/skein-store.js";
 
 // Run queue + streaming pub/sub contract.
 export type {

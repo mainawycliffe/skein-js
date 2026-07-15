@@ -184,14 +184,14 @@ export function createRunService(ctx: ProtocolContext): RunService {
 
       if (run.status === "pending") {
         // Queued but not started: finalize it and free the thread; the worker skips it on dequeue.
-        await deps.store.runs.setStatus(runId, "error");
+        await deps.store.runs.setStatus(runId, "cancelled");
         await deps.store.threads.update(run.thread_id, { status: "idle" });
         await deps.bus.close(runId);
         control.abort(runId, "cancel"); // no-op if not yet executing
       } else {
         // Running: mark terminal now (the engine won't overwrite it) and abort to stop the graph;
         // the engine's finally closes the bus and mirrors the thread back to idle.
-        await deps.store.runs.setStatus(runId, "error");
+        await deps.store.runs.setStatus(runId, "cancelled");
         await deps.store.threads.update(run.thread_id, { status: "idle" });
         control.abort(runId, "cancel");
       }

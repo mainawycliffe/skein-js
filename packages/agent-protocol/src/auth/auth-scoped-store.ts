@@ -60,6 +60,17 @@ export function createAuthScopedStore(
   if (resource === "threads") {
     const threads: ThreadRepo = {
       list: async () => (await inner.threads.list()).filter((thread) => matches(thread.metadata)),
+      search: async (query) => {
+        // Pagination must count only rows this caller owns, so strip limit/offset from the inner
+        // query, apply the ownership filter, then paginate here. (Ownership filtering is in-process
+        // today — see the SQL-pushdown follow-up in docs/roadmap.md.)
+        const { limit, offset, ...filters } = query;
+        const owned = (await inner.threads.search(filters)).filter((thread) =>
+          matches(thread.metadata),
+        );
+        const start = offset ?? 0;
+        return owned.slice(start, limit === undefined ? undefined : start + limit);
+      },
       get: async (threadId) => {
         const thread = await inner.threads.get(threadId);
         return thread && matches(thread.metadata) ? thread : null;
@@ -83,8 +94,17 @@ export function createAuthScopedStore(
           throw SkeinHttpError.notFound(`Thread "${threadId}" not found.`);
         }
         // Re-stamp when the patch touches metadata, so a caller can't drop their own owner tag.
-        const next = patch.metadata !== undefined ? { ...patch, metadata: stamp(patch.metadata) } : patch;
+        const next =
+          patch.metadata !== undefined ? { ...patch, metadata: stamp(patch.metadata) } : patch;
         return inner.threads.update(threadId, next);
+      },
+      copy: async (threadId) => {
+        const thread = await inner.threads.get(threadId);
+        if (!thread || !matches(thread.metadata)) {
+          throw SkeinHttpError.notFound(`Thread "${threadId}" not found.`);
+        }
+        // The copy inherits the source's metadata (already owner-stamped), so it stays owned by the caller.
+        return inner.threads.copy(threadId);
       },
       delete: async (threadId) => {
         const thread = await inner.threads.get(threadId);

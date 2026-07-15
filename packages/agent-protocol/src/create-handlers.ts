@@ -20,6 +20,7 @@ import {
   storeSearchSchema,
   threadCreateSchema,
   threadPatchSchema,
+  threadSearchSchema,
   threadStreamSchema,
 } from "./validation/schemas.js";
 
@@ -52,6 +53,7 @@ export interface ProtocolHandlers {
   createThread: ProtocolHandler;
   getThread: ProtocolHandler;
   listThreads: ProtocolHandler;
+  copyThread: ProtocolHandler;
   patchThread: ProtocolHandler;
   deleteThread: ProtocolHandler;
   getThreadHistory: ProtocolHandler;
@@ -128,7 +130,24 @@ export function createProtocolHandlers(service: ProtocolService): ProtocolHandle
     getThread: async (req) =>
       json(await service.threads.get(requireParam(req.params, "thread_id"))),
 
-    listThreads: async () => json(await service.threads.list()),
+    listThreads: async (req) => {
+      const body = parse(threadSearchSchema, req.body ?? {});
+      return json(
+        await service.threads.search({
+          metadata: body.metadata,
+          values: body.values,
+          status: body.status,
+          ids: body.ids,
+          limit: body.limit,
+          offset: body.offset,
+          sortBy: body.sort_by,
+          sortOrder: body.sort_order,
+        }),
+      );
+    },
+
+    copyThread: async (req) =>
+      json(await service.threads.copy(requireParam(req.params, "thread_id"))),
 
     patchThread: async (req) =>
       json(
@@ -217,7 +236,7 @@ export function createProtocolHandlers(service: ProtocolService): ProtocolHandle
     // --- store --------------------------------------------------------------------------------
     putStoreItem: async (req) => {
       const body = parse(storePutSchema, req.body);
-      return json(await service.store.put(body.namespace, body.key, body.value));
+      return json(await service.store.put(body.namespace, body.key, body.value, { ttl: body.ttl }));
     },
 
     getStoreItem: async (req) => {

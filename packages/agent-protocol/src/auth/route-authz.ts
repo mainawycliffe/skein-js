@@ -22,6 +22,7 @@ export const ROUTE_AUTHZ: Record<keyof ProtocolHandlers, RouteAuthz> = {
 
   // threads
   createThread: { resource: "threads", action: "create" },
+  copyThread: { resource: "threads", action: "create" },
   getThread: { resource: "threads", action: "read" },
   getThreadState: { resource: "threads", action: "read" },
   getThreadHistory: { resource: "threads", action: "read" },

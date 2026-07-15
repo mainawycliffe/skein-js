@@ -8,6 +8,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  isMetadataSubset,
   isTerminalRunStatus,
   SkeinHttpError,
   type Assistant,
@@ -22,11 +23,14 @@ import {
   type SearchItem,
   type SkeinStore,
   type SkeinStoreSnapshot,
+  type StorePutOptions,
   type StoreRepo,
   type StoreSearchQuery,
+  type StoreTtlConfig,
   type Thread,
   type ThreadCreate,
   type ThreadRepo,
+  type ThreadSearchQuery,
   type ThreadUpdate,
 } from "@skein-js/core";
 
@@ -73,6 +77,41 @@ export class MemorySkeinStore implements SkeinStore {
   // The opaque execution payload lives beside the run row (it is not part of the wire `Run`).
   readonly #runKwargs = new Map<string, RunKwargs>();
   readonly #items = new Map<string, Item>();
+  // Item expiry lives beside the item (never on the wire `Item`), keyed the same way as #items:
+  // `expiresAt` is epoch-ms (null = never expires), `ttlMinutes` is what a refresh-on-read extends by.
+  readonly #itemExpiry = new Map<string, { expiresAt: number | null; ttlMinutes: number | null }>();
+  readonly #ttl?: StoreTtlConfig;
+
+  constructor(options?: { ttl?: StoreTtlConfig }) {
+    this.#ttl = options?.ttl;
+  }
+
+  /** Record (or clear) an item's expiry from a resolved per-item TTL in minutes. */
+  #setExpiry(id: string, ttlMinutes: number | null): void {
+    if (ttlMinutes === null || ttlMinutes === undefined) {
+      this.#itemExpiry.delete(id);
+      return;
+    }
+    this.#itemExpiry.set(id, { expiresAt: Date.now() + ttlMinutes * 60_000, ttlMinutes });
+  }
+
+  /** True if the item has expired and should read as absent. */
+  #isExpired(id: string): boolean {
+    const entry = this.#itemExpiry.get(id);
+    return entry?.expiresAt != null && entry.expiresAt <= Date.now();
+  }
+
+  /**
+   * Extend a live item's expiry on read when TTL is configured and `refresh_on_read` isn't disabled
+   * (it defaults on). With no configured TTL we never refresh, matching the Postgres driver.
+   */
+  #maybeRefresh(id: string): void {
+    if (this.#ttl === undefined || this.#ttl.refreshOnRead === false) return;
+    const entry = this.#itemExpiry.get(id);
+    if (entry?.ttlMinutes != null) {
+      this.#itemExpiry.set(id, { ...entry, expiresAt: Date.now() + entry.ttlMinutes * 60_000 });
+    }
+  }
 
   readonly assistants: AssistantRepo = {
     list: async () => readAll(this.#assistants),
@@ -100,6 +139,28 @@ export class MemorySkeinStore implements SkeinStore {
 
   readonly threads: ThreadRepo = {
     list: async () => readAll(this.#threads),
+    search: async (query: ThreadSearchQuery) => {
+      const matched = readAll(this.#threads).filter(
+        (thread) =>
+          (!query.ids || query.ids.includes(thread.thread_id)) &&
+          (!query.status || thread.status === query.status) &&
+          isMetadataSubset(thread.metadata, query.metadata) &&
+          isMetadataSubset(thread.values, query.values),
+      );
+      const sortBy = query.sortBy ?? "created_at";
+      const direction = query.sortOrder === "asc" ? 1 : -1;
+      const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+      matched.sort((a, b) => {
+        const primary = compare(String(a[sortBy] ?? ""), String(b[sortBy] ?? ""));
+        // Break ties on thread_id in the same direction, so paging is deterministic and matches the
+        // Postgres driver's `ORDER BY <sortBy> <dir>, thread_id <dir>`.
+        const ordered = primary !== 0 ? primary : compare(a.thread_id, b.thread_id);
+        return direction * ordered;
+      });
+      const offset = query.offset ?? 0;
+      const limit = query.limit ?? matched.length;
+      return matched.slice(offset, offset + limit);
+    },
     get: async (threadId) => readOne(this.#threads, threadId),
     create: async (input?: ThreadCreate) => {
       const at = nowIso();
@@ -129,6 +190,19 @@ export class MemorySkeinStore implements SkeinStore {
         state_updated_at: patch.values !== undefined ? at : existing.state_updated_at,
       };
       return write(this.#threads, threadId, updated);
+    },
+    copy: async (threadId) => {
+      const existing = this.#threads.get(threadId);
+      if (!existing) throw SkeinHttpError.notFound(`Thread "${threadId}" not found.`);
+      const at = nowIso();
+      const copy: Thread = {
+        ...clone(existing),
+        thread_id: randomUUID(),
+        created_at: at,
+        updated_at: at,
+        state_updated_at: at,
+      };
+      return write(this.#threads, copy.thread_id, copy);
     },
     delete: async (threadId) => {
       this.#threads.delete(threadId);
@@ -185,10 +259,19 @@ export class MemorySkeinStore implements SkeinStore {
 
   readonly store: StoreRepo = {
     get: async (namespace, key) => {
-      const found = this.#items.get(itemKey(namespace, key));
-      return found ? clone(found) : null;
+      const id = itemKey(namespace, key);
+      const found = this.#items.get(id);
+      if (!found) return null;
+      // Lazy expiry: an expired item reads as absent even before the sweeper deletes it.
+      if (this.#isExpired(id)) {
+        this.#items.delete(id);
+        this.#itemExpiry.delete(id);
+        return null;
+      }
+      this.#maybeRefresh(id);
+      return clone(found);
     },
-    put: async (namespace, key, value) => {
+    put: async (namespace, key, value, options?: StorePutOptions) => {
       const id = itemKey(namespace, key);
       const at = nowIso();
       const existing = this.#items.get(id);
@@ -201,14 +284,20 @@ export class MemorySkeinStore implements SkeinStore {
       };
       const stored = clone(item);
       this.#items.set(id, stored);
+      // A per-put ttl wins; otherwise the configured default (null = never expires).
+      this.#setExpiry(id, options?.ttl ?? this.#ttl?.defaultTtl ?? null);
       return clone(stored);
     },
     delete: async (namespace, key) => {
-      this.#items.delete(itemKey(namespace, key));
+      const id = itemKey(namespace, key);
+      this.#items.delete(id);
+      this.#itemExpiry.delete(id);
     },
     search: async (query: StoreSearchQuery) => {
       const needle = query.query?.toLowerCase();
-      const matches: SearchItem[] = [...this.#items.values()]
+      const matches: SearchItem[] = [...this.#items.entries()]
+        .filter(([id]) => !this.#isExpired(id))
+        .map(([, item]) => item)
         .filter((item) => hasPrefix(item.namespace, query.prefix))
         .filter((item) =>
           needle ? JSON.stringify(item.value).toLowerCase().includes(needle) : true,
@@ -228,12 +317,24 @@ export class MemorySkeinStore implements SkeinStore {
       // Key by JSON.stringify (not join) so distinct namespaces whose segments contain the
       // separator can't collide.
       const seen = new Map<string, string[]>();
-      for (const item of this.#items.values()) {
+      for (const [id, item] of this.#items.entries()) {
+        if (this.#isExpired(id)) continue;
         if (hasPrefix(item.namespace, prefix)) {
           seen.set(JSON.stringify(item.namespace), item.namespace);
         }
       }
       return [...seen.values()].map((namespace) => [...namespace]);
+    },
+    sweepExpired: async () => {
+      let removed = 0;
+      for (const id of [...this.#itemExpiry.keys()]) {
+        if (this.#isExpired(id)) {
+          this.#items.delete(id);
+          this.#itemExpiry.delete(id);
+          removed += 1;
+        }
+      }
+      return removed;
     },
   };
 
@@ -264,6 +365,8 @@ export class MemorySkeinStore implements SkeinStore {
     fill(this.#runs, snapshot.runs);
     fill(this.#runKwargs, snapshot.runKwargs);
     fill(this.#items, snapshot.items);
+    // Item expiry is not persisted; a restored item won't expire until it is written again.
+    this.#itemExpiry.clear();
   }
 
   /**

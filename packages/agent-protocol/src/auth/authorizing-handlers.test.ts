@@ -11,9 +11,9 @@ import {
 } from "@skein-js/core";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { createFixtureDeps } from "../__fixtures__/deps.js";
 import type { ProtocolRequest } from "../create-handlers.js";
 import { createProtocolRuntime, type ProtocolRuntime } from "../runtime.js";
-import { createFixtureDeps } from "../__fixtures__/deps.js";
 
 interface FakeEngineOptions {
   studioAuthDisabled?: boolean;
@@ -46,7 +46,8 @@ function fakeEngine(options: FakeEngineOptions = {}): AuthEngine {
       return Object.entries(filters).every(([key, clause]) => {
         const actual = metadata?.[key];
         if (typeof clause === "string") return actual === clause;
-        if (typeof clause === "object" && typeof clause.$eq === "string") return actual === clause.$eq;
+        if (typeof clause === "object" && typeof clause.$eq === "string")
+          return actual === clause.$eq;
         if (typeof clause === "object" && clause.$contains !== undefined) {
           const required = Array.isArray(clause.$contains) ? clause.$contains : [clause.$contains];
           return Array.isArray(actual) && required.every((member) => actual.includes(member));
@@ -92,13 +93,17 @@ describe("authorizing handlers", () => {
   });
 
   it("stamps the owner onto a created thread", async () => {
-    const response = await runtime.handlers.createThread(asUser("alice", { method: "POST", body: {} }));
+    const response = await runtime.handlers.createThread(
+      asUser("alice", { method: "POST", body: {} }),
+    );
     const thread = (response as { body: { metadata: Record<string, unknown> } }).body;
     expect(thread.metadata.owner).toBe("alice");
   });
 
   it("hides another user's thread as 404 on read, patch, and delete", async () => {
-    const created = await runtime.handlers.createThread(asUser("alice", { method: "POST", body: {} }));
+    const created = await runtime.handlers.createThread(
+      asUser("alice", { method: "POST", body: {} }),
+    );
     const threadId = (created as { body: { thread_id: string } }).body.thread_id;
 
     const asBob = (overrides: Partial<ProtocolRequest>) =>
@@ -120,7 +125,9 @@ describe("authorizing handlers", () => {
     await runtime.handlers.createThread(asUser("alice", { method: "POST", body: {} }));
     await runtime.handlers.createThread(asUser("bob", { method: "POST", body: {} }));
 
-    const listed = await runtime.handlers.listThreads(asUser("alice", { method: "POST", body: {} }));
+    const listed = await runtime.handlers.listThreads(
+      asUser("alice", { method: "POST", body: {} }),
+    );
     const threads = (listed as { body: { metadata: Record<string, unknown> }[] }).body;
     expect(threads).toHaveLength(2);
     expect(threads.every((thread) => thread.metadata.owner === "alice")).toBe(true);
@@ -135,7 +142,9 @@ describe("authorizing handlers", () => {
     );
     const threadId = (created as { body: { thread_id: string } }).body.thread_id;
     await expectStatus(
-      denying.handlers.deleteThread(asUser("alice", { method: "DELETE", params: { thread_id: threadId } })),
+      denying.handlers.deleteThread(
+        asUser("alice", { method: "DELETE", params: { thread_id: threadId } }),
+      ),
       403,
     );
   });
@@ -164,29 +173,39 @@ describe("authorizing handlers", () => {
   });
 
   it("cancels an owned background run — shared cancellation registry survives the store swap", async () => {
-    const created = await runtime.handlers.createThread(asUser("alice", { method: "POST", body: {} }));
+    const created = await runtime.handlers.createThread(
+      asUser("alice", { method: "POST", body: {} }),
+    );
     const threadId = (created as { body: { thread_id: string } }).body.thread_id;
 
     const started = await runtime.handlers.createBackgroundRun(
-      asUser("alice", { method: "POST", params: { thread_id: threadId }, body: { assistant_id: "echo", input: {} } }),
+      asUser("alice", {
+        method: "POST",
+        params: { thread_id: threadId },
+        body: { assistant_id: "echo", input: {} },
+      }),
     );
     const run = (started as { body: { run_id: string; metadata: Record<string, unknown> } }).body;
     expect(run.metadata.owner).toBe("alice");
 
     // A different user cannot see the run.
     await expectStatus(
-      runtime.handlers.getRun(asUser("bob", { params: { thread_id: threadId, run_id: run.run_id } })),
+      runtime.handlers.getRun(
+        asUser("bob", { params: { thread_id: threadId, run_id: run.run_id } }),
+      ),
       404,
     );
 
     const cancelled = await runtime.handlers.cancelRun(
       asUser("alice", { method: "POST", params: { thread_id: threadId, run_id: run.run_id } }),
     );
-    expect((cancelled as { body: { status: string } }).body.status).toBe("error");
+    expect((cancelled as { body: { status: string } }).body.status).toBe("cancelled");
   });
 
   it("does not let a wait/stream run hijack another user's thread via a supplied thread_id", async () => {
-    const created = await runtime.handlers.createThread(asUser("alice", { method: "POST", body: {} }));
+    const created = await runtime.handlers.createThread(
+      asUser("alice", { method: "POST", body: {} }),
+    );
     const aliceThreadId = (created as { body: { thread_id: string } }).body.thread_id;
 
     // Bob runs against Alice's thread_id (the thread-scoped `/threads/{id}/runs/wait` path folds the
@@ -218,8 +237,11 @@ describe("authorizing handlers", () => {
         auth: fakeEngine({ filterFor: (identity) => ({ readers: { $contains: identity } }) }),
       }),
     );
-    const created = await membership.handlers.createThread(asUser("alice", { method: "POST", body: {} }));
-    const thread = (created as { body: { thread_id: string; metadata: Record<string, unknown> } }).body;
+    const created = await membership.handlers.createThread(
+      asUser("alice", { method: "POST", body: {} }),
+    );
+    const thread = (created as { body: { thread_id: string; metadata: Record<string, unknown> } })
+      .body;
     expect(thread.metadata.readers).toEqual(["alice"]);
 
     // The creator immediately reads it back (before the fix, the un-stamped thread was hidden → 404).

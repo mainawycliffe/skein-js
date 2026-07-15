@@ -53,10 +53,10 @@ Priority for v1 is marked **✅ MVP**. Deferred items are noted.
 | -------- | ------------------------------ | --- |
 | `POST`   | `/threads`                     | ✅  |
 | `GET`    | `/threads/{thread_id}`         | ✅  |
-| `POST`   | `/threads/search`              |     |
+| `POST`   | `/threads/search`              | ✅  |
 | `GET`    | `/threads/{thread_id}/history` |     |
 | `PATCH`  | `/threads/{thread_id}`         |     |
-| `POST`   | `/threads/{thread_id}/copy`    |     |
+| `POST`   | `/threads/{thread_id}/copy`    | ✅  |
 | `DELETE` | `/threads/{thread_id}`         | ✅  |
 
 ### Runs — stateless / ephemeral
@@ -75,7 +75,7 @@ Priority for v1 is marked **✅ MVP**. Deferred items are noted.
 | `GET`    | `/runs/{run_id}`               | ✅  |
 | `GET`    | `/runs/{run_id}/wait`          |     |
 | `GET`    | `/runs/{run_id}/stream` (join) | ✅  |
-| `POST`   | `/runs/{run_id}/cancel`        |     |
+| `POST`   | `/runs/{run_id}/cancel`        | ✅  |
 | `DELETE` | `/runs/{run_id}`               |     |
 
 ### Store (long-term memory)

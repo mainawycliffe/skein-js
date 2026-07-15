@@ -91,7 +91,7 @@ describe("run worker", () => {
     worker.start();
     try {
       await new Promise((resolve) => setTimeout(resolve, 100));
-      expect((await service.runs.get(run.run_id)).status).toBe("error");
+      expect((await service.runs.get(run.run_id)).status).toBe("cancelled");
     } finally {
       await worker.stop();
     }
@@ -113,6 +113,6 @@ describe("run worker", () => {
     await waitFor(async () => (await service.runs.get(run.run_id)).status === "running");
 
     await worker.stop(); // slow run never finishes on its own; must be aborted
-    expect((await service.runs.get(run.run_id)).status).toBe("error");
+    expect((await service.runs.get(run.run_id)).status).toBe("cancelled");
   });
 });

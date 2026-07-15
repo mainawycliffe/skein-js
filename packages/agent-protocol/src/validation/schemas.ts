@@ -78,6 +78,20 @@ export const threadPatchSchema = z
   })
   .passthrough();
 
+/** `POST /threads/search`. */
+export const threadSearchSchema = z
+  .object({
+    metadata: z.record(z.unknown()).optional(),
+    values: z.record(z.unknown()).optional(),
+    status: z.enum(["idle", "busy", "interrupted", "error"]).optional(),
+    ids: z.array(z.string()).optional(),
+    limit: z.number().int().positive().optional(),
+    offset: z.number().int().nonnegative().optional(),
+    sort_by: z.enum(["thread_id", "status", "created_at", "updated_at"]).optional(),
+    sort_order: z.enum(["asc", "desc"]).optional(),
+  })
+  .passthrough();
+
 /** `POST /assistants/search`. */
 export const assistantSearchSchema = z
   .object({
@@ -93,6 +107,8 @@ export const storePutSchema = z
     namespace: z.array(z.string()).min(1),
     key: z.string().min(1),
     value: z.record(z.unknown()),
+    /** Optional item lifetime in minutes; overrides the configured `store.ttl.default_ttl`. */
+    ttl: z.number().positive().optional(),
   })
   .passthrough();
 

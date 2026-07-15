@@ -21,8 +21,10 @@ import {
   type SearchItem,
   type SkeinStore,
   type SkeinStoreSnapshot,
+  type StorePutOptions,
   type StoreRepo,
   type StoreSearchQuery,
+  type StoreTtlConfig,
   type Thread,
   type ThreadCreate,
   type ThreadRepo,
@@ -62,6 +64,8 @@ export interface PostgresPoolOptions {
 export interface PostgresSkeinStoreOptions extends PostgresPoolOptions {
   /** Enables pgvector semantic store search. Omitted → search falls back to naive text matching. */
   index?: StoreIndexConfig;
+  /** Store-item expiry policy (from `langgraph.json` `store.ttl`). Omitted → items never expire. */
+  ttl?: StoreTtlConfig;
 }
 
 /**
@@ -202,6 +206,14 @@ function rowToItem(row: ItemRow, score?: number): SearchItem {
   return score === undefined ? item : { ...item, score };
 }
 
+/** SQL predicate: the store item is not past its TTL (or has none). */
+const NOT_EXPIRED = "(expires_at IS NULL OR expires_at > now())";
+
+/** SQL expression computing `expires_at` from a ttl-in-minutes bind param (`null` → never expires). */
+const expiresAtSql = (ttlParam: string): string =>
+  `CASE WHEN ${ttlParam}::double precision IS NULL THEN NULL ` +
+  `ELSE now() + ${ttlParam}::double precision * interval '1 minute' END`;
+
 /** Absolute path to this package's node-pg-migrate migration files (resolves from src or dist). */
 function migrationsDir(): string {
   return fileURLToPath(new URL("../migrations", import.meta.url));
@@ -212,11 +224,13 @@ export class PostgresSkeinStore implements SkeinStore {
   readonly #pool: Pool;
   readonly #url: string;
   readonly #index?: StoreIndexConfig;
+  readonly #ttl?: StoreTtlConfig;
 
-  private constructor(pool: Pool, url: string, index?: StoreIndexConfig) {
+  private constructor(pool: Pool, url: string, index?: StoreIndexConfig, ttl?: StoreTtlConfig) {
     this.#pool = pool;
     this.#url = url;
     this.#index = index;
+    this.#ttl = ttl;
   }
 
   /** Connect to Postgres. Call {@link migrate} once before use to create/upgrade the schema. */
@@ -224,7 +238,12 @@ export class PostgresSkeinStore implements SkeinStore {
     url: string,
     options: PostgresSkeinStoreOptions = {},
   ): Promise<PostgresSkeinStore> {
-    return new PostgresSkeinStore(createPostgresPool(url, options), url, options.index);
+    return new PostgresSkeinStore(
+      createPostgresPool(url, options),
+      url,
+      options.index,
+      options.ttl,
+    );
   }
 
   /** Apply pending schema migrations (idempotent) via node-pg-migrate. */
@@ -480,6 +499,46 @@ export class PostgresSkeinStore implements SkeinStore {
       );
       return rows.map(rowToThread);
     },
+    search: async (query) => {
+      const params: unknown[] = [];
+      const clauses: string[] = [];
+      if (query.metadata && Object.keys(query.metadata).length > 0) {
+        params.push(JSON.stringify(query.metadata));
+        clauses.push(`metadata @> $${params.length}::jsonb`);
+      }
+      if (query.values && Object.keys(query.values).length > 0) {
+        params.push(JSON.stringify(query.values));
+        clauses.push(`values @> $${params.length}::jsonb`);
+      }
+      if (query.status) {
+        params.push(query.status);
+        clauses.push(`status = $${params.length}`);
+      }
+      if (query.ids) {
+        params.push(query.ids);
+        clauses.push(`thread_id = ANY($${params.length}::text[])`);
+      }
+      const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+      // Whitelist the sort column — it is interpolated, never parameterized.
+      const sortColumns = new Set(["thread_id", "status", "created_at", "updated_at"]);
+      const sortBy = sortColumns.has(query.sortBy ?? "") ? query.sortBy : "created_at";
+      const direction = query.sortOrder === "asc" ? "ASC" : "DESC";
+      params.push(query.offset ?? 0);
+      const offsetParam = `$${params.length}`;
+      let limitClause = "";
+      if (query.limit !== undefined) {
+        params.push(query.limit);
+        limitClause = `LIMIT $${params.length}`;
+      }
+      // `thread_id` is a unique tiebreaker so OFFSET/LIMIT paging is stable when the primary sort key
+      // ties (equal timestamps/status) — without it Postgres row order is undefined across queries and
+      // a page could drop or duplicate a row.
+      const { rows } = await this.#pool.query<ThreadRow>(
+        `SELECT * FROM threads ${where} ORDER BY ${sortBy} ${direction}, thread_id ${direction} OFFSET ${offsetParam} ${limitClause}`,
+        params,
+      );
+      return rows.map(rowToThread);
+    },
     get: async (threadId) => {
       const { rows } = await this.#pool.query<ThreadRow>(
         "SELECT * FROM threads WHERE thread_id = $1",
@@ -516,6 +575,18 @@ export class PostgresSkeinStore implements SkeinStore {
           patch.values === undefined ? null : JSON.stringify(patch.values),
           patch.interrupts === undefined ? null : JSON.stringify(patch.interrupts),
         ],
+      );
+      if (!rows[0]) throw SkeinHttpError.notFound(`Thread "${threadId}" not found.`);
+      return rowToThread(rows[0]);
+    },
+    copy: async (threadId) => {
+      // Duplicate the row under a fresh id and timestamps; checkpoint history is copied separately
+      // at the service layer via the LangGraph checkpointer.
+      const { rows } = await this.#pool.query<ThreadRow>(
+        `INSERT INTO threads (thread_id, status, metadata, values, interrupts)
+         SELECT $1, status, metadata, values, interrupts FROM threads WHERE thread_id = $2
+         RETURNING *`,
+        [randomUUID(), threadId],
       );
       if (!rows[0]) throw SkeinHttpError.notFound(`Thread "${threadId}" not found.`);
       return rowToThread(rows[0]);
@@ -585,34 +656,55 @@ export class PostgresSkeinStore implements SkeinStore {
 
   readonly store: StoreRepo = {
     get: async (namespace, key) => {
+      // Only when TTL is configured (and refresh-on-read isn't disabled) does a live read extend the
+      // item's expiry. Doing it as an `UPDATE ... RETURNING` both refreshes and filters out an
+      // already-expired row in one round trip. With no TTL configured we take the plain SELECT path so
+      // a read-heavy store never pays for a write on every get.
+      if (this.#ttl !== undefined && this.#ttl.refreshOnRead !== false) {
+        const { rows } = await this.#pool.query<ItemRow>(
+          `UPDATE store_items
+             SET expires_at = CASE WHEN ttl_minutes IS NOT NULL
+                                   THEN now() + ttl_minutes * interval '1 minute'
+                                   ELSE expires_at END
+           WHERE namespace = $1::text[] AND key = $2 AND ${NOT_EXPIRED}
+           RETURNING namespace, key, value, created_at, updated_at`,
+          [namespace, key],
+        );
+        return rows[0] ? rowToItem(rows[0]) : null;
+      }
       const { rows } = await this.#pool.query<ItemRow>(
-        "SELECT namespace, key, value, created_at, updated_at FROM store_items WHERE namespace = $1::text[] AND key = $2",
+        `SELECT namespace, key, value, created_at, updated_at FROM store_items
+         WHERE namespace = $1::text[] AND key = $2 AND ${NOT_EXPIRED}`,
         [namespace, key],
       );
       return rows[0] ? rowToItem(rows[0]) : null;
     },
-    put: async (namespace, key, value) => {
+    put: async (namespace, key, value, options?: StorePutOptions) => {
+      // A per-put ttl (minutes) wins; otherwise the configured default (null = never expires).
+      const ttlMinutes = options?.ttl ?? this.#ttl?.defaultTtl ?? null;
       // The `embedding` column only exists when a store index is configured (see migrate()); a
       // pgvector-free deployment writes the row without it, so a stock Postgres never sees `vector`.
       if (this.#index !== undefined) {
         const embedding = await this.#embed(textForValue(value, this.#index.fields));
         const { rows } = await this.#pool.query<ItemRow>(
-          `INSERT INTO store_items (namespace, key, value, embedding)
-           VALUES ($1::text[], $2, $3::jsonb, $4::vector)
+          `INSERT INTO store_items (namespace, key, value, embedding, ttl_minutes, expires_at)
+           VALUES ($1::text[], $2, $3::jsonb, $4::vector, $5, ${expiresAtSql("$5")})
            ON CONFLICT (namespace, key)
-           DO UPDATE SET value = EXCLUDED.value, embedding = EXCLUDED.embedding, updated_at = now()
+           DO UPDATE SET value = EXCLUDED.value, embedding = EXCLUDED.embedding,
+             ttl_minutes = EXCLUDED.ttl_minutes, expires_at = EXCLUDED.expires_at, updated_at = now()
            RETURNING namespace, key, value, created_at, updated_at`,
-          [namespace, key, JSON.stringify(value), embedding],
+          [namespace, key, JSON.stringify(value), embedding, ttlMinutes],
         );
         return rowToItem(rows[0] as ItemRow);
       }
       const { rows } = await this.#pool.query<ItemRow>(
-        `INSERT INTO store_items (namespace, key, value)
-         VALUES ($1::text[], $2, $3::jsonb)
+        `INSERT INTO store_items (namespace, key, value, ttl_minutes, expires_at)
+         VALUES ($1::text[], $2, $3::jsonb, $4, ${expiresAtSql("$4")})
          ON CONFLICT (namespace, key)
-         DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+         DO UPDATE SET value = EXCLUDED.value, ttl_minutes = EXCLUDED.ttl_minutes,
+           expires_at = EXCLUDED.expires_at, updated_at = now()
          RETURNING namespace, key, value, created_at, updated_at`,
-        [namespace, key, JSON.stringify(value)],
+        [namespace, key, JSON.stringify(value), ttlMinutes],
       );
       return rowToItem(rows[0] as ItemRow);
     },
@@ -625,12 +717,20 @@ export class PostgresSkeinStore implements SkeinStore {
     search: async (query: StoreSearchQuery) => this.#search(query),
     listNamespaces: async (prefix) => {
       const usePrefix = prefix !== undefined && prefix.length > 0;
-      const clause = usePrefix ? "WHERE namespace[1:cardinality($1::text[])] = $1::text[]" : "";
+      const clause = usePrefix
+        ? `WHERE namespace[1:cardinality($1::text[])] = $1::text[] AND ${NOT_EXPIRED}`
+        : `WHERE ${NOT_EXPIRED}`;
       const { rows } = await this.#pool.query<{ namespace: string[] }>(
         `SELECT DISTINCT namespace FROM store_items ${clause} ORDER BY namespace`,
         usePrefix ? [prefix] : [],
       );
       return rows.map((row) => row.namespace);
+    },
+    sweepExpired: async () => {
+      const { rowCount } = await this.#pool.query(
+        `DELETE FROM store_items WHERE expires_at IS NOT NULL AND expires_at <= now()`,
+      );
+      return rowCount ?? 0;
     },
   };
 
@@ -659,7 +759,7 @@ export class PostgresSkeinStore implements SkeinStore {
     if (query.query !== undefined && this.#index !== undefined) {
       const queryVector = await this.#embed(query.query);
       const params: unknown[] = [queryVector];
-      let where = "embedding IS NOT NULL";
+      let where = `embedding IS NOT NULL AND ${NOT_EXPIRED}`;
       if (usePrefix) {
         params.push(query.prefix);
         where += ` AND namespace[1:cardinality($${params.length}::text[])] = $${params.length}::text[]`;
@@ -680,7 +780,9 @@ export class PostgresSkeinStore implements SkeinStore {
       return rows.map((row) => rowToItem(row, row.score));
     }
 
-    const clause = usePrefix ? "WHERE namespace[1:cardinality($1::text[])] = $1::text[]" : "";
+    const clause = usePrefix
+      ? `WHERE namespace[1:cardinality($1::text[])] = $1::text[] AND ${NOT_EXPIRED}`
+      : `WHERE ${NOT_EXPIRED}`;
     const { rows } = await this.#pool.query<ItemRow>(
       `SELECT namespace, key, value, created_at, updated_at FROM store_items ${clause} ORDER BY created_at, key`,
       usePrefix ? [query.prefix] : [],

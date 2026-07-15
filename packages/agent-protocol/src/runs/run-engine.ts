@@ -208,9 +208,9 @@ export async function executeRun(deps: ResolvedDeps, exec: RunExecution): Promis
     // returned outcome, and the client's cancel/timeout all agree.
     if (control.signal.aborted) {
       const timedOut = control.reason.current === "timeout";
-      const finalStatus = await finalizeRun(deps, runId, timedOut ? "timeout" : "error");
+      const finalStatus = await finalizeRun(deps, runId, timedOut ? "timeout" : "cancelled");
       if (finalStatus === "timeout") await mirrorThreadError(deps, threadId, "Run timed out.");
-      else if (finalStatus === "error") await mirrorThreadStatus(deps, threadId, "idle");
+      else if (finalStatus === "cancelled") await mirrorThreadStatus(deps, threadId, "idle");
       logFinished(finalStatus);
       return { status: finalStatus, values: {} as DefaultValues };
     }
@@ -241,9 +241,10 @@ export async function executeRun(deps: ResolvedDeps, exec: RunExecution): Promis
       return { status: finalStatus, values: {} as DefaultValues };
     }
     if (reason === "cancel" || control.signal.aborted) {
-      // A cancelled run is a terminal error, but the thread is free again (idle).
-      const finalStatus = await finalizeRun(deps, runId, "error");
-      if (finalStatus === "error") await mirrorThreadStatus(deps, threadId, "idle");
+      // A cancelled run is terminal in its own right (distinct from a failure), and the thread is
+      // free again (idle).
+      const finalStatus = await finalizeRun(deps, runId, "cancelled");
+      if (finalStatus === "cancelled") await mirrorThreadStatus(deps, threadId, "idle");
       logFinished(finalStatus);
       return { status: finalStatus, values: {} as DefaultValues };
     }

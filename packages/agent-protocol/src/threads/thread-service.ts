@@ -4,11 +4,18 @@
 // can't write to a thread that's about to disappear.
 
 import {
+  copyCheckpoint,
+  type BaseCheckpointSaver,
+  type CheckpointMetadata,
+  type CheckpointTuple,
+} from "@langchain/langgraph";
+import {
   isTerminalRunStatus,
   SkeinHttpError,
   type Metadata,
   type Thread,
   type ThreadCreate,
+  type ThreadSearchQuery,
   type ThreadState,
 } from "@skein-js/core";
 
@@ -33,11 +40,64 @@ export interface ThreadService {
   create(input?: CreateThreadInput): Promise<Thread>;
   get(threadId: string): Promise<Thread>;
   list(): Promise<Thread[]>;
+  /** Filtered + paginated listing — `POST /threads/search`. */
+  search(query: ThreadSearchQuery): Promise<Thread[]>;
   patch(threadId: string, patch: PatchThreadInput): Promise<Thread>;
+  /** Duplicate a thread (new id) together with its full checkpoint history — `POST /threads/{id}/copy`. */
+  copy(threadId: string): Promise<Thread>;
   delete(threadId: string): Promise<void>;
   history(threadId: string, options?: HistoryOptions): Promise<ThreadState[]>;
   /** The thread's current state snapshot — `GET /threads/{id}/state`, what `useStream` hydrates from. */
   getState(threadId: string): Promise<ThreadState>;
+}
+
+/**
+ * Replay every checkpoint of `sourceId` under `targetId` so a copied thread carries the same graph
+ * history. Checkpoints are keyed only by `thread_id` in skein (namespace `""`), so the source id is
+ * simply swapped. We replay oldest-first so each checkpoint's parent already exists when it lands.
+ */
+async function copyCheckpointHistory(
+  checkpointer: BaseCheckpointSaver,
+  sourceId: string,
+  targetId: string,
+): Promise<void> {
+  const tuples: CheckpointTuple[] = [];
+  for await (const tuple of checkpointer.list({ configurable: { thread_id: sourceId } })) {
+    tuples.push(tuple);
+  }
+  // `list` yields newest-first; reverse so parents are written before their children.
+  for (const tuple of tuples.reverse()) {
+    const ns = (tuple.config.configurable?.checkpoint_ns as string | undefined) ?? "";
+    const parentId = tuple.parentConfig?.configurable?.checkpoint_id as string | undefined;
+    const putConfig = {
+      configurable: { thread_id: targetId, checkpoint_ns: ns, checkpoint_id: parentId },
+    };
+    await checkpointer.put(
+      putConfig,
+      copyCheckpoint(tuple.checkpoint),
+      tuple.metadata ?? ({} as CheckpointMetadata),
+      tuple.checkpoint.channel_versions,
+    );
+    if (tuple.pendingWrites && tuple.pendingWrites.length > 0) {
+      const writeConfig = {
+        configurable: {
+          thread_id: targetId,
+          checkpoint_ns: ns,
+          checkpoint_id: tuple.checkpoint.id,
+        },
+      };
+      // pendingWrites are [taskId, channel, value]; putWrites takes [channel, value] per taskId.
+      const byTask = new Map<string, [string, unknown][]>();
+      for (const [taskId, channel, value] of tuple.pendingWrites) {
+        const writes = byTask.get(taskId) ?? [];
+        writes.push([channel, value]);
+        byTask.set(taskId, writes);
+      }
+      for (const [taskId, writes] of byTask) {
+        await checkpointer.putWrites(writeConfig, writes, taskId);
+      }
+    }
+  }
 }
 
 /**
@@ -115,9 +175,42 @@ export function createThreadService(ctx: ProtocolContext): ThreadService {
 
     list: () => deps.store.threads.list(),
 
+    search: (query) => deps.store.threads.search(query),
+
     async patch(threadId, patch) {
       await requireThread(threadId);
       return deps.store.threads.update(threadId, { metadata: patch.metadata });
+    },
+
+    async copy(threadId) {
+      await requireThread(threadId);
+      const copy = await deps.store.threads.copy(threadId);
+      await copyCheckpointHistory(deps.checkpointer, threadId, copy.thread_id);
+      // Re-create the source's *terminal* runs under the copy (new ids, same assistant/kwargs/status).
+      // skein resolves a thread's graph from its latest run, so without these the copied checkpoints
+      // would be unreadable via getState/history — and the copy couldn't be resumed or continued. We
+      // deliberately skip a still-inflight (pending/running) run: copying it would leave the copy with
+      // a phantom active run that no worker drives and no engine finalizes, permanently blocking new
+      // runs on the copy (hasActiveRun) and pinning its thread status to busy.
+      const sourceRuns = await deps.store.runs.listByThread(threadId);
+      for (const run of [...sourceRuns].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+        if (!isTerminalRunStatus(run.status)) continue;
+        const kwargs = await deps.store.runs.getKwargs(run.run_id);
+        await deps.store.runs.create({
+          thread_id: copy.thread_id,
+          assistant_id: run.assistant_id,
+          status: run.status,
+          metadata: run.metadata,
+          multitask_strategy: run.multitask_strategy,
+          ...(kwargs ? { kwargs } : {}),
+        });
+      }
+      // The copy has no run of its own in flight, so a source that was mid-run ("busy") must not
+      // carry that status over — reset it to idle so the copy isn't stuck looking active.
+      if (copy.status === "busy") {
+        return deps.store.threads.update(copy.thread_id, { status: "idle" });
+      }
+      return copy;
     },
 
     async delete(threadId) {

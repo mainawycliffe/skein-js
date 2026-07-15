@@ -226,7 +226,8 @@ items, and the **full checkpoint history** are all migrated. Because skein uses 
 Minor, deliberate drops: the store's derived **embedding index** (`vectors`) is not copied (skein
 re-indexes on write / a configured `store.index` re-embeds on Postgres import), LangGraph
 **assistant version history** and **retry counters** aren't part of skein's model, and run **webhooks**
-aren't carried in the replay payload.
+aren't carried in the replay payload. (Assistant versioning and webhooks are on the
+[roadmap](./roadmap.md#planned--coming-soon-post-mvp).)
 
 > The `.langgraph_api/` layout is a `@langchain/langgraph-api` internal (stable across 1.2.x–1.4.x),
 > not a public API. The importer is best-effort and guarded — a format it can't read never blocks

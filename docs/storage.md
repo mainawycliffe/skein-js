@@ -73,6 +73,27 @@ a graph that calls `getStore()` runs unchanged on skein. The bridge is `SkeinBas
 checkpointer is. Semantic `search` uses pgvector on the Postgres driver and a naive scan on memory —
 both come from the same `StoreRepo`, so behavior matches.
 
+### Store item TTL
+
+Store items can expire, matching LangGraph's store TTL. Configure it in `langgraph.json` under
+`store.ttl` (all durations in **minutes**):
+
+```json
+{
+  "store": { "ttl": { "default_ttl": 1440, "refresh_on_read": true, "sweep_interval_minutes": 60 } }
+}
+```
+
+- `default_ttl` — lifetime applied to a `put` that doesn't pass its own `ttl`. A `PUT /store/items`
+  body may include a per-item `ttl` (minutes) that overrides the default for that item.
+- `refresh_on_read` (default `true`) — a `get` extends a live item's expiry by its own TTL.
+- `sweep_interval_minutes` (default `60`) — how often the background sweeper deletes expired rows.
+
+Expiry is enforced two ways: **lazily** (an expired item reads as absent from `get`/`search`/
+`listNamespaces` even before it's swept) and by the **sweeper** (a periodic `DELETE`). With no
+`store.ttl` set, items never expire. The sweeper runs in the production runtime (`skein up`/`build`,
+and `skein dev --store postgres`); pure in-memory `skein dev` still enforces expiry lazily on read.
+
 ## Drivers
 
 ### `@skein-js/storage-memory` (dev/tests)

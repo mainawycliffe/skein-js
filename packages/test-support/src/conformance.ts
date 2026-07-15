@@ -110,6 +110,99 @@ export function runSkeinStoreConformance(label: string, makeStore: SkeinStoreFac
         await store.threads.delete(thread_id);
         expect(await store.threads.get(thread_id)).toBeNull();
       });
+
+      it("searches threads by metadata subset", async () => {
+        const store = await makeStore();
+        await store.threads.create({ metadata: { user: "alice", tier: "pro" } });
+        await store.threads.create({ metadata: { user: "bob", tier: "pro" } });
+        await store.threads.create({ metadata: { user: "alice", tier: "free" } });
+
+        const proAlice = await store.threads.search({ metadata: { user: "alice", tier: "pro" } });
+        expect(proAlice).toHaveLength(1);
+        expect(proAlice[0]?.metadata).toMatchObject({ user: "alice", tier: "pro" });
+
+        const allPro = await store.threads.search({ metadata: { tier: "pro" } });
+        expect(allPro).toHaveLength(2);
+
+        // An empty filter matches every thread.
+        expect(await store.threads.search({})).toHaveLength(3);
+      });
+
+      it("matches nested metadata by deep containment (Postgres @> semantics)", async () => {
+        const store = await makeStore();
+        await store.threads.create({ metadata: { profile: { plan: "pro", region: "eu" } } });
+        await store.threads.create({ metadata: { profile: { plan: "free", region: "eu" } } });
+
+        // A partial nested filter must match a superset object — both drivers agree via `@>`.
+        const pro = await store.threads.search({ metadata: { profile: { plan: "pro" } } });
+        expect(pro).toHaveLength(1);
+        expect(pro[0]?.metadata).toMatchObject({ profile: { plan: "pro", region: "eu" } });
+
+        // A nested value that doesn't match excludes the row.
+        expect(
+          await store.threads.search({ metadata: { profile: { plan: "team" } } }),
+        ).toHaveLength(0);
+      });
+
+      it("filters thread search by status and paginates with limit/offset", async () => {
+        const store = await makeStore();
+        const a = await store.threads.create();
+        await store.threads.update(a.thread_id, { status: "interrupted" });
+        await store.threads.create();
+        await store.threads.create();
+
+        const interrupted = await store.threads.search({ status: "interrupted" });
+        expect(interrupted.map((t) => t.thread_id)).toEqual([a.thread_id]);
+
+        const firstTwo = await store.threads.search({ limit: 2 });
+        expect(firstTwo).toHaveLength(2);
+        const nextOne = await store.threads.search({ limit: 2, offset: 2 });
+        expect(nextOne).toHaveLength(1);
+        // No overlap between the two pages.
+        const ids = new Set(firstTwo.map((t) => t.thread_id));
+        expect(ids.has(nextOne[0]?.thread_id ?? "")).toBe(false);
+      });
+
+      it("paginates deterministically when the sort key ties on every row", async () => {
+        const store = await makeStore();
+        const created: string[] = [];
+        for (let i = 0; i < 5; i += 1) created.push((await store.threads.create()).thread_id);
+
+        // Sort by `status` — every thread is "idle", so the primary key ties for all rows and paging
+        // relies entirely on the thread_id tiebreaker. Walking every page must cover each row exactly
+        // once (no drops, no duplicates).
+        const seen: string[] = [];
+        for (let offset = 0; offset < 5; offset += 2) {
+          const page = await store.threads.search({ sortBy: "status", limit: 2, offset });
+          seen.push(...page.map((t) => t.thread_id));
+        }
+        expect(seen).toHaveLength(5);
+        expect(new Set(seen).size).toBe(5);
+        expect([...seen].sort()).toEqual([...created].sort());
+      });
+
+      it("copies a thread into a new row carrying metadata, values, and status", async () => {
+        const store = await makeStore();
+        const source = await store.threads.create({ metadata: { user: "alice" } });
+        await store.threads.update(source.thread_id, {
+          status: "interrupted",
+          values: { count: 3 },
+        });
+
+        const copy = await store.threads.copy(source.thread_id);
+        expect(copy.thread_id).not.toBe(source.thread_id);
+        expect(copy.metadata).toMatchObject({ user: "alice" });
+        expect(copy.status).toBe("interrupted");
+        expect(copy.values).toMatchObject({ count: 3 });
+        // The original is untouched and both now exist.
+        expect(await store.threads.get(source.thread_id)).not.toBeNull();
+        expect(await store.threads.get(copy.thread_id)).not.toBeNull();
+      });
+
+      it("rejects copying an unknown thread", async () => {
+        const store = await makeStore();
+        await expect(store.threads.copy("nope")).rejects.toThrow();
+      });
     });
 
     describe("runs", () => {
@@ -278,6 +371,34 @@ export function runSkeinStoreConformance(label: string, makeStore: SkeinStoreFac
         await store.store.put(["a/b"], "k2", {});
         // Distinct namespaces `["a","b"]` and `["a/b"]` must both be listed, not merged.
         expect(await store.store.listNamespaces()).toHaveLength(2);
+      });
+    });
+
+    describe("store TTL", () => {
+      // A tiny fractional-minute TTL (~40ms) keeps the expiry tests fast and deterministic.
+      const tinyTtlMinutes = 40 / 60_000;
+      const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+      it("keeps an item with no TTL and does not sweep it", async () => {
+        const store = await makeStore();
+        await store.store.put(["ns"], "keep", { v: 1 });
+
+        expect(await store.store.sweepExpired()).toBe(0);
+        expect(await store.store.get(["ns"], "keep")).not.toBeNull();
+      });
+
+      it("expires a per-put TTL item: reads null and the sweeper removes it", async () => {
+        const store = await makeStore();
+        await store.store.put(["ns"], "gone", { v: 1 }, { ttl: tinyTtlMinutes });
+
+        await wait(120);
+        // Lazy expiry: an expired item reads as absent even before the sweep runs.
+        expect(await store.store.get(["ns"], "gone")).toBeNull();
+        // And it is no longer surfaced by search or namespace listing.
+        expect(await store.store.search({ prefix: ["ns"] })).toHaveLength(0);
+        // The sweeper physically deletes remaining expired rows (idempotent afterwards).
+        await store.store.sweepExpired();
+        expect(await store.store.sweepExpired()).toBe(0);
       });
     });
 
