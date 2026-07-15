@@ -67,6 +67,14 @@ fully self-hosted / hybrid deployment is **Enterprise-only** with custom pricing
 **Self-Hosted Lite** exists but is node-capped and still needs a LangSmith API key.
 ([pricing](https://www.langchain.com/pricing) · [self-hosting docs](https://docs.langchain.com/langgraph-platform/self-hosted))
 
+If you're a **hobbyist or just getting started**, that model isn't ideal — you shouldn't need a
+commercial license or a per-run bill to ship a side project. And if the LangGraph Platform license
+_does_ make sense for you later (bigger team, SLAs, managed ops), that's fine too: skein-js is built
+to make moving **either direction** painless. Because it's a drop-in for the LangGraph CLI on an
+**unchanged `langgraph.json`**, switching _from_ LangGraph — or back _to_ it — is a one-word change,
+not a migration. Our goal is low lock-in in both directions, so you can start free on skein-js and
+adopt the platform if and when it's worth it.
+
 So if you're a **TypeScript** team that wants to **truly self-host** — your infra, your data, no
 license key, no per-run bill — you were stuck choosing between the paid platform, running a Python
 sidecar, or hand-rolling an HTTP layer around your graph.
