@@ -34,6 +34,7 @@ export type {
   RunKwargs,
   RunRepo,
   SkeinStore,
+  SkeinStoreSnapshot,
   StoreRepo,
   StoreSearchQuery,
   ThreadCreate,

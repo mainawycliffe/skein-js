@@ -44,7 +44,9 @@
     "@skein-js/config": "workspace:*",
     "@skein-js/core": "workspace:*",
     "@skein-js/storage-memory": "workspace:*",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "superjson": "^2.2.6",
+    "zod": "^3.25.76"
   },
   "peerDependencies": {
     "@langchain/langgraph": "^1.4.0",

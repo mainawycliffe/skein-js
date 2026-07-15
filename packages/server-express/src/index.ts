@@ -23,6 +23,14 @@ export type {
   DevStateSnapshot,
 } from "./in-memory-runtime.js";
 
+// Import an existing LangGraph in-memory dev state (`.langgraph_api/`) into skein, losslessly.
+export {
+  readLanggraphDevState,
+  loadSnapshotIntoStore,
+  describeSnapshot,
+} from "./langgraph-import.js";
+export type { DevStateCounts } from "./langgraph-import.js";
+
 // LangGraph-compatible CORS: map a langgraph.json `http.cors` block to `cors` options.
 export { corsFromHttpConfig, toCorsOptions } from "./cors-config.js";
 export type { LanggraphCorsConfig } from "./cors-config.js";

@@ -167,3 +167,22 @@ export interface SkeinStore {
   runs: RunRepo;
   store: StoreRepo;
 }
+
+/**
+ * A driver-agnostic, JSON-serializable snapshot of every resource row — the unit of bulk
+ * transfer for persistence and migration tooling (e.g. `skein dev`'s cross-restart snapshot, and
+ * importing an existing LangGraph in-memory dev state). Each entry is an `[id, row]` tuple: the id
+ * is the entity's own id, except `items` (keyed by `JSON.stringify([namespace, key])`) and
+ * `runKwargs` (keyed by `run_id`, since {@link RunKwargs} has no id of its own).
+ *
+ * A driver MAY expose `restore(snapshot)` to bulk-load one of these verbatim — ids and timestamps
+ * preserved — which is what makes an import lossless. It is intentionally not part of
+ * {@link SkeinStore}: only migration tooling needs it, and consumers feature-detect it.
+ */
+export interface SkeinStoreSnapshot {
+  assistants: [string, Assistant][];
+  threads: [string, Thread][];
+  runs: [string, Run][];
+  runKwargs: [string, RunKwargs][];
+  items: [string, Item][];
+}

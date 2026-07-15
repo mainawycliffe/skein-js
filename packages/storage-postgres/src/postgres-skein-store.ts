@@ -20,6 +20,7 @@ import {
   type RunStatus,
   type SearchItem,
   type SkeinStore,
+  type SkeinStoreSnapshot,
   type StoreRepo,
   type StoreSearchQuery,
   type Thread,
@@ -179,7 +180,10 @@ export class PostgresSkeinStore implements SkeinStore {
   }
 
   /** Connect to Postgres. Call {@link migrate} once before use to create/upgrade the schema. */
-  static async connect(url: string, options: PostgresSkeinStoreOptions = {}): Promise<PostgresSkeinStore> {
+  static async connect(
+    url: string,
+    options: PostgresSkeinStoreOptions = {},
+  ): Promise<PostgresSkeinStore> {
     const pool = new Pool({ connectionString: url });
     // An idle client can emit 'error' (server restart, dropped connection); without a listener
     // node-postgres re-emits it as an unhandled 'error' that crashes the process. The pool evicts
@@ -209,6 +213,141 @@ export class PostgresSkeinStore implements SkeinStore {
   /** Empty every resource table. For tests that need a clean schema without re-migrating. */
   async truncateAll(): Promise<void> {
     await this.#pool.query("TRUNCATE assistants, threads, runs, store_items CASCADE");
+  }
+
+  /**
+   * Bulk-load rows from a {@link SkeinStoreSnapshot}, preserving ids **and timestamps**, in one
+   * transaction. Existing rows are left untouched (`ON CONFLICT DO NOTHING`) so re-running an
+   * import never clobbers state skein has written since. Threads are inserted before runs to
+   * satisfy the runs→threads foreign key, and a run whose thread isn't part of the import is skipped
+   * (rather than tripping the FK and aborting everything). When a store index is configured, item
+   * embeddings are computed in one batch outside the transaction; if the embedder fails, items are
+   * still imported (just not semantically indexed) rather than failing the whole migration — this
+   * matches the memory driver, which never embeds. The lossless Postgres sink for migration tooling
+   * (`loadSnapshotIntoStore` in `@skein-js/express` feature-detects it — see the LangGraph importer).
+   */
+  async restore(snapshot: SkeinStoreSnapshot): Promise<void> {
+    const kwargsByRun = new Map(snapshot.runKwargs);
+
+    // Embed store items in ONE batch, outside the transaction (an external embedder shouldn't hold a
+    // client, and one call beats N). A failure is non-fatal: we warn and import the items without a
+    // vector, so the migration still completes. Skipped/failed items simply get a null embedding.
+    const embeddingByItem = new Map<string, string>();
+    if (this.#index !== undefined && snapshot.items.length > 0) {
+      const { dims, fields } = this.#index;
+      try {
+        const vectors = await this.#index.embed(
+          snapshot.items.map(([, item]) => textForValue(item.value, fields)),
+        );
+        snapshot.items.forEach(([id], index) => {
+          const vector = vectors[index];
+          if (vector && vector.length === dims) embeddingByItem.set(id, toVectorLiteral(vector));
+        });
+      } catch (error) {
+        console.warn(
+          `skein: could not embed imported store items; importing them without a semantic index ` +
+            `(${error instanceof Error ? error.message : String(error)}).`,
+        );
+      }
+    }
+
+    // Runs FK-reference threads; a run whose thread isn't in this import can't be inserted, so skip
+    // it instead of aborting the whole transaction (the memory driver has no FK and tolerates it).
+    const importedThreadIds = new Set(snapshot.threads.map(([, thread]) => thread.thread_id));
+    let skippedOrphanRuns = 0;
+
+    const client = await this.#pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const [, assistant] of snapshot.assistants) {
+        await client.query(
+          `INSERT INTO assistants
+             (assistant_id, graph_id, name, description, config, context, metadata, version, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10)
+           ON CONFLICT (assistant_id) DO NOTHING`,
+          [
+            assistant.assistant_id,
+            assistant.graph_id,
+            assistant.name ?? assistant.graph_id,
+            assistant.description ?? null,
+            JSON.stringify(assistant.config ?? {}),
+            JSON.stringify(assistant.context ?? {}),
+            JSON.stringify(assistant.metadata ?? {}),
+            assistant.version ?? 1,
+            assistant.created_at,
+            assistant.updated_at,
+          ],
+        );
+      }
+      for (const [, thread] of snapshot.threads) {
+        await client.query(
+          `INSERT INTO threads
+             (thread_id, status, metadata, values, interrupts, created_at, updated_at, state_updated_at)
+           VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, $8)
+           ON CONFLICT (thread_id) DO NOTHING`,
+          [
+            thread.thread_id,
+            thread.status ?? "idle",
+            JSON.stringify(thread.metadata ?? {}),
+            JSON.stringify(thread.values ?? {}),
+            JSON.stringify(thread.interrupts ?? {}),
+            thread.created_at,
+            thread.updated_at,
+            thread.state_updated_at ?? thread.updated_at,
+          ],
+        );
+      }
+      for (const [, run] of snapshot.runs) {
+        if (!importedThreadIds.has(run.thread_id)) {
+          skippedOrphanRuns += 1;
+          continue;
+        }
+        const kwargs = kwargsByRun.get(run.run_id) ?? null;
+        await client.query(
+          `INSERT INTO runs
+             (run_id, thread_id, assistant_id, status, metadata, multitask_strategy, kwargs, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8, $9)
+           ON CONFLICT (run_id) DO NOTHING`,
+          [
+            run.run_id,
+            run.thread_id,
+            run.assistant_id,
+            run.status ?? "pending",
+            JSON.stringify(run.metadata ?? {}),
+            run.multitask_strategy ?? null,
+            kwargs === null ? null : JSON.stringify(kwargs),
+            run.created_at,
+            run.updated_at,
+          ],
+        );
+      }
+      for (const [id, item] of snapshot.items) {
+        await client.query(
+          `INSERT INTO store_items (namespace, key, value, embedding, created_at, updated_at)
+           VALUES ($1::text[], $2, $3::jsonb, $4::vector, $5, $6)
+           ON CONFLICT (namespace, key) DO NOTHING`,
+          [
+            item.namespace,
+            item.key,
+            JSON.stringify(item.value),
+            embeddingByItem.get(id) ?? null,
+            item.createdAt,
+            item.updatedAt,
+          ],
+        );
+      }
+      await client.query("COMMIT");
+      if (skippedOrphanRuns > 0) {
+        console.warn(
+          `skein: skipped ${skippedOrphanRuns} imported run(s) whose thread was not part of the import.`,
+        );
+      }
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   readonly assistants: AssistantRepo = {
@@ -248,7 +387,9 @@ export class PostgresSkeinStore implements SkeinStore {
 
   readonly threads: ThreadRepo = {
     list: async () => {
-      const { rows } = await this.#pool.query<ThreadRow>("SELECT * FROM threads ORDER BY created_at");
+      const { rows } = await this.#pool.query<ThreadRow>(
+        "SELECT * FROM threads ORDER BY created_at",
+      );
       return rows.map(rowToThread);
     },
     get: async (threadId) => {
@@ -262,7 +403,11 @@ export class PostgresSkeinStore implements SkeinStore {
       const { rows } = await this.#pool.query<ThreadRow>(
         `INSERT INTO threads (thread_id, status, metadata)
          VALUES ($1, $2, $3::jsonb) RETURNING *`,
-        [input?.thread_id ?? randomUUID(), input?.status ?? "idle", JSON.stringify(input?.metadata ?? {})],
+        [
+          input?.thread_id ?? randomUUID(),
+          input?.status ?? "idle",
+          JSON.stringify(input?.metadata ?? {}),
+        ],
       );
       return rowToThread(rows[0] as ThreadRow);
     },
@@ -295,7 +440,9 @@ export class PostgresSkeinStore implements SkeinStore {
 
   readonly runs: RunRepo = {
     get: async (runId) => {
-      const { rows } = await this.#pool.query<RunRow>("SELECT * FROM runs WHERE run_id = $1", [runId]);
+      const { rows } = await this.#pool.query<RunRow>("SELECT * FROM runs WHERE run_id = $1", [
+        runId,
+      ]);
       return rows[0] ? rowToRun(rows[0]) : null;
     },
     listByThread: async (threadId) => {
@@ -380,9 +527,7 @@ export class PostgresSkeinStore implements SkeinStore {
     search: async (query: StoreSearchQuery) => this.#search(query),
     listNamespaces: async (prefix) => {
       const usePrefix = prefix !== undefined && prefix.length > 0;
-      const clause = usePrefix
-        ? "WHERE namespace[1:cardinality($1::text[])] = $1::text[]"
-        : "";
+      const clause = usePrefix ? "WHERE namespace[1:cardinality($1::text[])] = $1::text[]" : "";
       const { rows } = await this.#pool.query<{ namespace: string[] }>(
         `SELECT DISTINCT namespace FROM store_items ${clause} ORDER BY namespace`,
         usePrefix ? [prefix] : [],

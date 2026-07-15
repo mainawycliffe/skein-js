@@ -11,6 +11,7 @@ import { Command, InvalidArgumentError } from "@commander-js/extra-typings";
 
 import { runDev } from "./dev-command.js";
 import { runBuild, runDockerfile, runUp } from "./docker/commands.js";
+import { runImportLanggraph } from "./import-command.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
@@ -80,6 +81,20 @@ program
   .option("-c, --config <path>", "Path to langgraph.json", "langgraph.json")
   .option("-o, --output <path>", "Write the Dockerfile here instead of stdout")
   .action((options) => runDockerfile(options));
+
+program
+  .command("import-langgraph")
+  .description("Import an existing LangGraph in-memory dev state (.langgraph_api/) into skein.")
+  .option("-c, --config <path>", "Path to langgraph.json", "langgraph.json")
+  .option(
+    "--store <driver>",
+    "Import target: memory (.skein/dev-state.json) | postgres (DATABASE_URL)",
+    parseStore,
+    "memory",
+  )
+  .option("--from <dir>", "Source .langgraph_api directory (defaults to alongside langgraph.json)")
+  .option("--force", "Overwrite an existing .skein/dev-state.json (memory target)", false)
+  .action((options) => runImportLanggraph(options));
 
 try {
   await program.parseAsync(process.argv);

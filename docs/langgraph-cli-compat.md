@@ -11,6 +11,7 @@ two things: read the same `langgraph.json`, and mirror the same command surface.
 - [Graph loading (`path:export` notation)](#graph-loading-pathexport-notation)
 - [Authentication + authorization (`auth`)](#authentication--authorization-auth)
 - [`dev` vs `up`](#dev-vs-up)
+- [Migrating an existing `langgraph dev` state](#migrating-an-existing-langgraph-dev-state)
 
 ## Command mapping
 
@@ -192,3 +193,46 @@ lifecycle and the route → resource/action map.
 - **`skein up`** — Docker Compose bringing up the app plus Postgres (checkpoints + protocol
   resources + pgvector) and Redis (queue + cross-instance streaming). Mirrors production —
   see [runs-and-redis.md](./runs-and-redis.md).
+
+## Migrating an existing `langgraph dev` state
+
+When you run `langgraph dev`, LangGraph persists all local state — assistants, threads, runs,
+store items, and graph **checkpoints** (state + full history) — under a `.langgraph_api/`
+directory. skein reads that format and carries everything over, so switching loses nothing.
+
+**Automatic (the common case).** The first time you run `skein dev` in a project that has a
+`.langgraph_api/` directory but no skein state yet (`.skein/dev-state.json`), skein imports it on
+boot and logs what it brought over. From then on it persists to `.skein/` as usual, so the import
+runs exactly once. Nothing to do — your old threads and their history are just there.
+
+**Explicit — `skein import-langgraph`.** For re-running, previewing counts, or importing into a
+durable database:
+
+| Flag               | Values               | Default                    | Notes                                                                                 |
+| ------------------ | -------------------- | -------------------------- | ------------------------------------------------------------------------------------- |
+| `-c, --config`     | path                 | `langgraph.json`           | Resolves the project directory.                                                       |
+| `--store <driver>` | `memory`, `postgres` | `memory`                   | `memory` writes `.skein/dev-state.json`; `postgres` loads a live DB (`DATABASE_URL`). |
+| `--from <dir>`     | path                 | `<project>/.langgraph_api` | Source directory to read.                                                             |
+| `--force`          | —                    | off                        | Overwrite an existing `.skein/dev-state.json` (memory target).                        |
+
+```bash
+skein import-langgraph                     # → .skein/dev-state.json, then `skein dev`
+skein import-langgraph --store postgres     # → your DATABASE_URL (checkpoints + resource rows)
+```
+
+**What carries over, and what doesn't.** Assistants, threads (with their latest state), runs, store
+items, and the **full checkpoint history** are all migrated. Because skein uses LangGraph's own
+`MemorySaver`/`PostgresSaver`, the checkpoint format is identical — history is preserved exactly.
+Minor, deliberate drops: the store's derived **embedding index** (`vectors`) is not copied (skein
+re-indexes on write / a configured `store.index` re-embeds on Postgres import), LangGraph
+**assistant version history** and **retry counters** aren't part of skein's model, and run **webhooks**
+aren't carried in the replay payload.
+
+> The `.langgraph_api/` layout is a `@langchain/langgraph-api` internal (stable across 1.2.x–1.4.x),
+> not a public API. The importer is best-effort and guarded — a format it can't read never blocks
+> `skein dev` from starting.
+>
+> **Already on Postgres?** If your LangGraph deployment already uses a Postgres checkpointer, you
+> don't need to migrate checkpoints at all: point skein at the **same `DATABASE_URL`** and it shares
+> the exact same checkpoint tables. `skein import-langgraph --store postgres` is for moving an
+> in-memory `langgraph dev` (including one run in production) onto a durable skein deployment.

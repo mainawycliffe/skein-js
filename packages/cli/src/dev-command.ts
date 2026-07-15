@@ -9,12 +9,14 @@
 //     the next boot (mirroring how `langgraph dev` keeps local state).
 // No Docker, no child process.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { loadConfig, parseEnvFile, resolveEnv } from "@skein-js/config";
+import { loadConfig } from "@skein-js/config";
 import {
   createExpressServer,
+  describeSnapshot,
+  readLanggraphDevState,
   type DevStateSnapshot,
   type SkeinExpressServer,
 } from "@skein-js/express";
@@ -22,6 +24,8 @@ import { buildRuntime, type QueueDriver, type StoreDriver } from "@skein-js/runt
 
 import { printBanner } from "./banner.js";
 import { createDevLogger } from "./dev-logger.js";
+import { devStateFile, writeDevStateFile, LANGGRAPH_DIR, STATE_DIR } from "./dev-state.js";
+import { applyProjectEnv } from "./project-env.js";
 import { createViteGraphLoader } from "./vite-graph-loader.js";
 
 /** The flags `skein dev` accepts, after commander parsing. */
@@ -47,31 +51,10 @@ const RELOAD_DEBOUNCE_MS = 120;
 const AUTOSAVE_MS = 2000;
 /** How long to wait for a graceful shutdown before forcing exit — an in-flight run can stall it. */
 const FORCE_EXIT_MS = 5000;
-/** Where persisted dev state lives, relative to the config directory. */
-const STATE_DIR = ".skein";
-const STATE_FILE = "dev-state.json";
 
 /** Console logger for the dev server — colored, `info:`-prefixed output that drives per-request
  * logging, the background-run summaries, the startup banner, and surfaces engine warnings. */
 const devLogger = createDevLogger();
-
-/** Apply resolved env to `process.env` without clobbering values already set in the environment. */
-function applyEnv(resolved: Record<string, string>): void {
-  for (const [key, value] of Object.entries(resolved)) {
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-}
-
-/** Parse a conventional `.env` in `dir`, if present. Best-effort — a read/parse error yields `{}`. */
-function readConventionalDotEnv(dir: string): Record<string, string> {
-  const envPath = path.join(dir, ".env");
-  if (!existsSync(envPath)) return {};
-  try {
-    return parseEnvFile(readFileSync(envPath, "utf8"));
-  } catch {
-    return {};
-  }
-}
 
 export async function runDev(options: DevCommandOptions): Promise<void> {
   const configPath = path.resolve(process.cwd(), options.config);
@@ -79,20 +62,10 @@ export async function runDev(options: DevCommandOptions): Promise<void> {
   // Validate + resolve env before starting anything, so a bad config fails fast and graphs see
   // their env on first load. `loadConfig` here does not import `.ts` — that happens through vite.
   const { config, configDir } = await loadConfig({ configPath });
-  // A conventional `.env` is the base; `langgraph.json`'s declared `env` overrides it; the ambient
-  // environment wins over both (dotenv convention). Skip the conventional read when the declared
-  // `env` already points at the same `.env` file, so we don't read + parse it twice.
-  const declaredEnvPath =
-    typeof config.env === "string" ? path.resolve(configDir, config.env) : undefined;
-  const conventional =
-    declaredEnvPath === path.join(configDir, ".env") ? {} : readConventionalDotEnv(configDir);
-  applyEnv({ ...conventional, ...(await resolveEnv(config, configDir)) });
-  if (declaredEnvPath !== undefined && !existsSync(declaredEnvPath)) {
-    console.warn(`skein: env file "${config.env}" not found; continuing without it.`);
-  }
+  await applyProjectEnv(config, configDir);
 
   const stateDir = path.join(configDir, STATE_DIR);
-  const stateFile = path.join(stateDir, STATE_FILE);
+  const stateFile = devStateFile(configDir);
 
   // Ignore our own persisted-state dir: its periodic autosave writes would otherwise be seen as
   // source changes and trigger an endless reload loop.
@@ -118,6 +91,25 @@ export async function runDev(options: DevCommandOptions): Promise<void> {
     } catch (error) {
       console.warn(
         `skein: could not restore dev state: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  } else if (canPersist && existsSync(path.join(configDir, LANGGRAPH_DIR))) {
+    // No skein state yet, but a LangGraph dev state is present — import it once so switching from
+    // `langgraph dev` loses nothing. It then persists to `.skein/` on the next autosave, and this
+    // branch won't run again. Guarded so a format mismatch never blocks startup.
+    try {
+      const imported = await readLanggraphDevState(path.join(configDir, LANGGRAPH_DIR));
+      if (imported) {
+        runtime.hydrateState?.(imported);
+        const counts = describeSnapshot(imported);
+        console.log(
+          `skein: imported dev state from ${LANGGRAPH_DIR}/ ` +
+            `(${counts.threads} thread(s), ${counts.checkpointedThreads} with history).`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `skein: could not import ${LANGGRAPH_DIR}/: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -164,10 +156,7 @@ export async function runDev(options: DevCommandOptions): Promise<void> {
     try {
       const serialized = JSON.stringify(runtime.snapshotState());
       if (serialized === lastSaved) return; // unchanged since the last write — skip the disk churn
-      mkdirSync(path.dirname(stateFile), { recursive: true });
-      const tmp = `${stateFile}.tmp`;
-      writeFileSync(tmp, serialized);
-      renameSync(tmp, stateFile); // atomic replace, so a crash mid-write can't corrupt the file
+      writeDevStateFile(stateFile, serialized);
       lastSaved = serialized;
     } catch (error) {
       console.warn(

@@ -21,6 +21,7 @@ import {
   type RunStatus,
   type SearchItem,
   type SkeinStore,
+  type SkeinStoreSnapshot,
   type StoreRepo,
   type StoreSearchQuery,
   type Thread,
@@ -264,13 +265,29 @@ export class MemorySkeinStore implements SkeinStore {
     fill(this.#runKwargs, snapshot.runKwargs);
     fill(this.#items, snapshot.items);
   }
+
+  /**
+   * Bulk-load rows from a snapshot, preserving ids + timestamps and *without* clearing what's
+   * already here: existing ids are left untouched (insert-if-absent). Unlike {@link hydrate} (a
+   * full replace for cross-restart persistence), this is the additive, lossless sink used by
+   * migration tooling — see `@skein-js/express`'s LangGraph importer. `loadSnapshotIntoStore`
+   * feature-detects this method, so the memory and Postgres drivers import identically.
+   */
+  async restore(snapshot: SkeinStoreSnapshot): Promise<void> {
+    const add = <T>(map: Map<string, T>, rows: [string, T][]): void => {
+      for (const [id, row] of rows) if (!map.has(id)) map.set(id, clone(row));
+    };
+    add(this.#assistants, snapshot.assistants);
+    add(this.#threads, snapshot.threads);
+    add(this.#runs, snapshot.runs);
+    add(this.#runKwargs, snapshot.runKwargs);
+    add(this.#items, snapshot.items);
+  }
 }
 
-/** A JSON-serializable copy of a {@link MemorySkeinStore}'s rows. */
-export interface MemoryStoreSnapshot {
-  assistants: [string, Assistant][];
-  threads: [string, Thread][];
-  runs: [string, Run][];
-  runKwargs: [string, RunKwargs][];
-  items: [string, Item][];
-}
+/**
+ * A JSON-serializable copy of a {@link MemorySkeinStore}'s rows. An alias of the driver-agnostic
+ * {@link SkeinStoreSnapshot} (identical shape); the name predates the shared type and is kept so
+ * the dev-persistence snapshot format reads the same.
+ */
+export type MemoryStoreSnapshot = SkeinStoreSnapshot;
