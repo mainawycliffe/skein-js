@@ -28,6 +28,13 @@ the LangGraph CLI** (`skein dev` ⇄ `langgraph dev`, unchanged `langgraph.json`
 3. **Simple & consistent.** Small functions, named exports, kebab-case files, one public
    surface per package (`src/index.ts`). Match the surrounding style. Let the linter/formatter
    settle style — don't hand-argue it.
+4. **Green before commit — never commit red.** Before every commit make the gate pass:
+   `pnpm format:check`, `pnpm exec nx run-many -t lint typecheck test build --exclude='examples/*'`,
+   and (Docker up) `nx run-many -t test-integration`. Examples are excluded locally — they need live
+   services / local `.env` — and are covered by [`ci.yml`](.github/workflows/ci.yml) in a clean env;
+   if you touched an example, run its target directly. Docs must reflect any behavior/architecture
+   change. Use [`/commit`](.claude/skills/commit/SKILL.md), which enforces all of this. Same bar as
+   [Definition of done](#definition-of-done); a commit that skips it is a bug.
 
 ## This is an Nx monorepo (pnpm) — use Nx
 
