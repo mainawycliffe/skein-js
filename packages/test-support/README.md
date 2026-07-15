@@ -1,10 +1,11 @@
 # @skein-js/test-support
 
-> Private test helpers for skein-js — **internal, not published**.
+> Internal test helpers for skein-js — **contributors only, not published to npm**.
 
-Part of **[skein-js](https://github.com/mainawycliffe/skein)**. This package is `private` and
-consumed in-repo via `workspace:*` (its exports point at TypeScript source, transpiled by each
-consumer's Vitest) — you don't install it.
+Part of **[skein-js](../../README.md)**. This package is `private` and consumed in-repo via
+`workspace:*` (its exports point at TypeScript source, transpiled by each consumer's Vitest) — it is
+**not published for consumers** and you don't install it. It exists for people **contributing to
+skein-js**; see [CONTRIBUTING.md](../../CONTRIBUTING.md) and [docs/testing.md](../../docs/testing.md).
 
 ## What it provides
 

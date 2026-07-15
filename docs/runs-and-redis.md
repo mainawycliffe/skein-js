@@ -8,6 +8,13 @@ This doc covers how skein-js executes runs and how it scales horizontally — mo
 > server runs runs in-process, in-memory). It is _not_ a checkpointer; for Redis-backed
 > checkpoints use `@langchain/langgraph-checkpoint-redis`. See [reuse.md](./reuse.md).
 
+## Contents
+
+- [Run modes](#run-modes)
+- [Run engine](#run-engine)
+- [Queue drivers](#queue-drivers)
+- [Deployment topology (`skein up`)](#deployment-topology-skein-up)
+
 ## Run modes
 
 The [Agent Protocol](./agent-protocol.md) defines three ways to execute a graph:

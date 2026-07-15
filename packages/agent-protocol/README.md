@@ -2,9 +2,25 @@
 
 > The framework-agnostic Agent Protocol **engine** — run engine, handler table, and SSE mapping. The heart of skein-js.
 
-Part of **[skein-js](https://github.com/mainawycliffe/skein)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
+Part of **[skein-js](../../README.md)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
 
 **Status:** 🚧 Pre-alpha — implemented. Depends only on the [`@skein-js/core`](../core) contracts and is designed to be consumed on its own.
+
+This is **the engine** at the heart of skein-js: a complete, framework-agnostic implementation of the
+Agent Protocol for LangGraph.js. Build your own server on it — any HTTP framework, any storage/queue —
+by injecting a [`ProtocolDeps`](#the-injected-contract-protocoldeps).
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Install](#install)
+- [Usage](#usage)
+- [Two layers](#two-layers)
+- [The injected contract (`ProtocolDeps`)](#the-injected-contract-protocoldeps)
+- [API](#api)
+- [Reuse](#reuse)
+- [Learn more](#learn-more)
+- [License](#license)
 
 ## What it does
 
@@ -17,12 +33,16 @@ client.
 
 ## Install
 
-```sh
-npm install @skein-js/agent-protocol @skein-js/core @langchain/langgraph @langchain/langgraph-sdk
+```bash
+pnpm add @skein-js/agent-protocol @skein-js/core
 ```
 
-`@langchain/langgraph` and `@langchain/langgraph-sdk` are peer dependencies; `@skein-js/core` is a
-regular dependency you should pin alongside.
+`@langchain/langgraph` and `@langchain/langgraph-sdk` are peer dependencies — install them too if
+your project doesn't already depend on them:
+
+```bash
+pnpm add @langchain/langgraph @langchain/langgraph-sdk
+```
 
 ## Usage
 
@@ -108,7 +128,8 @@ from `@langchain/langgraph-sdk` via [`@skein-js/core`](../core).
 ## Learn more
 
 - [Agent Protocol surface](../../docs/agent-protocol.md) · [Streaming (SSE)](../../docs/streaming.md) · [Runs & Redis](../../docs/runs-and-redis.md)
-- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md)
+- [Building your own adapter](../../docs/building-an-adapter.md) — mount this engine on any HTTP framework
+- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md) · [Root README](../../README.md)
 
 ## License
 

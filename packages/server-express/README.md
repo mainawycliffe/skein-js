@@ -2,7 +2,7 @@
 
 > Express adapter for skein-js — mount the Agent Protocol on an Express `Router`.
 
-Part of **[skein-js](https://github.com/mainawycliffe/skein)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
+Part of **[skein-js](../../README.md)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
 
 **Status:** 🚧 Pre-alpha — implemented; the v1 framework adapter.
 
@@ -19,11 +19,11 @@ out. It adds **no protocol logic of its own** — it's a thin transport shim. It
 ## Install
 
 ```bash
-pnpm add @skein-js/express
+pnpm add @skein-js/express @langchain/langgraph
 ```
 
-Peer dependencies (install both in your project): **`express`** (`>=4.18`) and
-**`@langchain/langgraph`**.
+**`express`** (`>=4.18`) and **`@langchain/langgraph`** are peer dependencies. `express` is almost
+always already in your app; add it too if not (`pnpm add express`).
 
 ## Usage
 
@@ -52,10 +52,19 @@ app.listen(2024);
 ```
 
 Bring your own persistent drivers (e.g. Postgres + Redis, assembled by
-[`@skein-js/runtime`](../runtime)) through the same seam:
+[`@skein-js/runtime`](../runtime)) through the same `deps` seam:
 
 ```ts
-const { router } = await skeinRouter({ deps: myProtocolDeps });
+import { skeinRouter } from "@skein-js/express";
+import { buildRuntime } from "@skein-js/runtime";
+
+const runtime = await buildRuntime({
+  configPath: "./langgraph.json",
+  store: "postgres",
+  queue: "redis",
+});
+const { router } = await skeinRouter({ deps: runtime.deps, cors: runtime.cors });
+app.use(router);
 ```
 
 ## API
@@ -100,7 +109,7 @@ its own.
 ## Learn more
 
 - [Agent Protocol surface](../../docs/agent-protocol.md) · [Streaming (SSE)](../../docs/streaming.md) · [React SDK / `useStream`](../../docs/react-sdk.md)
-- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md)
+- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md) · [Root README](../../README.md)
 
 ## License
 

@@ -1,5 +1,20 @@
 # Roadmap
 
+> Project milestones and post-MVP non-goals — fine for anyone to read. For the product overview see the
+> [README](../README.md) and [docs index](./index.md).
+
+## Contents
+
+- [Phase 0 — Documentation & scaffolding](#phase-0--documentation--scaffolding--current)
+- [Phase 1+ — Implementation](#phase-1--implementation)
+  - [Done](#done-)
+  - [Remaining (MVP)](#remaining-mvp)
+- [Shipped beyond the original plan](#shipped-beyond-the-original-plan)
+- [Planned / coming soon (post-MVP)](#planned--coming-soon-post-mvp)
+- [Known gaps vs. the LangGraph CLI / Platform](#known-gaps-vs-the-langgraph-cli--platform)
+- [Non-goals for v1](#non-goals-for-v1)
+- [Verification](#verification)
+
 ## Phase 0 — Documentation & scaffolding ✅ (current)
 
 - Repo, license, README, `AGENTS.md`/`CLAUDE.md`, and this `docs/` set (incl.
@@ -70,20 +85,60 @@ Steps 1–10 below are complete: the dev loop **and** self-hosted production bot
   `store` (both gate-only today — assistants are auto-registered without an owner and store rows
   carry no metadata).
 
-## Post-MVP / non-goals for v1
+## Planned / coming soon (post-MVP)
 
-- WebSocket streaming transport (SSE covers the client UX; **does not affect the React SDK**).
-- Cron / scheduling.
-- `skein deploy` to a hosted platform.
-- Full OpenTelemetry observability.
-- **`@skein-js/nextjs` adapter** — mount the Agent Protocol inside an existing Next.js app via a
-  single App Router catch-all route. The transport-neutral handler table already fits: `ProtocolRequest`
-  is a plain `{ params, query, body, headers }` and the SSE `ProtocolResponse` is an
-  `AsyncIterable<string>` that maps directly onto a Web `ReadableStream`, so it's a thin adapter like
-  Express. **Caveat:** the background run worker (and the in-memory driver's shared state) need a
-  long-lived Node process — fine on `next start`, but serverless/edge deploys require the Redis queue
-  and Postgres store (steps 8–9) with `runtime = 'nodejs'`. Complementary to `skein dev` (which is the
-  standalone dev server), not a replacement.
+These are on the map but not yet built. Want one sooner? Upvote or open an issue —
+<https://github.com/mainawycliffe/skein-js/issues>.
+
+- 🗺️ **`@skein-js/nextjs` adapter — serve smaller graphs from Next.js API routes.** Mount the Agent
+  Protocol inside an existing Next.js app via a single App Router catch-all route — no separate server
+  process, ideal for small/medium graphs you want to ship alongside your frontend. The
+  transport-neutral handler table already fits: `ProtocolRequest` is a plain
+  `{ params, query, body, headers }` and the SSE `ProtocolResponse` is an `AsyncIterable<string>` that
+  maps directly onto a Web `ReadableStream`, so it's a thin adapter like Express. **Caveat:** the
+  background run worker (and the in-memory driver's shared state) need a long-lived Node process — fine
+  on `next start` with `runtime = 'nodejs'`, but serverless/edge deploys require the Redis queue and
+  Postgres store (steps 8–9). Complementary to `skein dev` (the standalone dev server), not a
+  replacement.
+- 🗺️ **Cron / scheduled runs (LangGraph parity).** LangGraph Platform exposes a **Crons** resource
+  (create/list/delete schedules that kick off a run on a thread on a cadence). skein-js does not yet
+  implement it — see [Known gaps](#known-gaps-vs-the-langgraph-cli--platform). Planned: a `crons`
+  resource in [`@skein-js/agent-protocol`](../packages/agent-protocol) backed by a scheduler over the
+  existing run queue (a natural fit for the BullMQ repeatable-jobs feature on the Redis driver).
+- 🗺️ **Custom-adapter example.** The [Building your own adapter](./building-an-adapter.md) guide
+  exists; we still want a runnable `examples/custom-adapter` (a dependency-free Node `http` — or Hono
+  — adapter over the transport-neutral handler table) as an executable, tested reference to accompany
+  the guide.
+
+## Known gaps vs. the LangGraph CLI / Platform
+
+skein-js aims to be a **drop-in for the LangGraph CLI**, so it's worth being explicit about what
+isn't covered yet. If you hit one of these — or a gap not listed here — please
+[file an issue](https://github.com/mainawycliffe/skein-js/issues); compatibility reports are the most
+valuable feedback we can get.
+
+| Capability                            | Status in skein-js | Notes                                                        |
+| ------------------------------------- | ------------------ | ------------------------------------------------------------ |
+| `dev` / `up` / `build` / `dockerfile` | ✅ shipped         | Drop-in for the LangGraph CLI commands.                      |
+| Assistants / threads / runs / store   | ✅ shipped         | Full Agent Protocol surface; three run modes; SSE streaming. |
+| Human-in-the-loop (interrupt/resume)  | ✅ shipped         | Via LangGraph checkpointers.                                 |
+| Auth + authorization                  | ✅ shipped         | LangGraph `Auth` parity — see below.                         |
+| **Cron / scheduled runs**             | 🗺️ planned         | LangGraph Platform's Crons resource; not yet implemented.    |
+| **Fastify / NestJS adapters**         | 🗺️ planned (MVP)   | Express ships today.                                         |
+| **Next.js API-route adapter**         | 🗺️ planned         | For serving smaller graphs from a Next.js app.               |
+| WebSocket streaming transport         | ❌ non-goal (v1)   | SSE covers the client UX; does not affect the React SDK.     |
+| `deploy` to a hosted platform         | ❌ non-goal        | skein-js is self-hosted by design.                           |
+| Full OpenTelemetry observability      | ❌ non-goal (v1)   | May revisit post-v1.                                         |
+
+## Non-goals for v1
+
+Deliberately out of scope for the first stable release (may be revisited later):
+
+- **WebSocket streaming transport** — SSE covers the client UX and **does not affect the React SDK**.
+- **`skein deploy` to a hosted platform** — skein-js is self-hosted by design; there's no managed
+  target to push to.
+- **Full OpenTelemetry observability** — structured logging ships today; full OTel tracing is a
+  later consideration.
 
 ## Verification
 

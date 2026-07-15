@@ -2,7 +2,7 @@
 
 > Redis job queue (BullMQ) and cross-instance pub/sub streaming for skein-js.
 
-Part of **[skein-js](https://github.com/mainawycliffe/skein)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
+Part of **[skein-js](../../README.md)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
 
 **Status:** 🚧 Pre-alpha — implemented (BullMQ queue + Redis Streams/pub-sub bus); integration tests need Docker.
 
@@ -71,7 +71,7 @@ This package is the run **queue + pub/sub** — not a checkpointer. For Redis-ba
 ## Learn more
 
 - [Runs & Redis](../../docs/runs-and-redis.md) · [Streaming (SSE)](../../docs/streaming.md)
-- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md)
+- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md) · [Root README](../../README.md)
 
 ## License
 

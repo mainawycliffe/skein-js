@@ -1,10 +1,25 @@
 # Streaming (SSE)
 
-skein-js maps LangGraph.js **stream modes** onto Agent Protocol **Server-Sent Events (SSE)**.
-This one transport powers the `/runs/stream` endpoint, joining an in-flight run
-(`/runs/{id}/stream`), and thread-scoped streaming (`/threads/{id}/stream`).
+Streaming is what makes an agent UI feel alive: tokens appear as the model writes them, model
+**thinking** streams into a collapsible panel, tool calls and their **structured results** show up as
+they happen, and a paused run's **interrupt** surfaces for approval. skein-js delivers all of it over
+one transport — **Server-Sent Events (SSE)** — so the standard clients ([`useStream`](./react-sdk.md),
+the vanilla SDK, Agent Chat UI) render a rich conversation against a skein-js server with only a URL
+change. The flagship [`chat-app`](../examples/chat-app) example wires the full experience end to end;
+[`react-usestream`](../examples/react-usestream) is the minimal harness.
+
+Under the hood, skein-js maps LangGraph.js **stream modes** onto Agent Protocol SSE. This one
+transport powers the `/runs/stream` endpoint, joining an in-flight run (`/runs/{id}/stream`), and
+thread-scoped streaming (`/threads/{id}/stream`).
 
 Reference: LangGraph streaming — <https://docs.langchain.com/oss/javascript/langgraph/streaming>
+
+## Contents
+
+- [LangGraph.js stream modes](#langgraphjs-stream-modes)
+- [Mapping to Agent Protocol SSE](#mapping-to-agent-protocol-sse)
+- [Joining and cross-instance fan-out](#joining-and-cross-instance-fan-out)
+- [Why SSE is enough (no WebSocket in v1)](#why-sse-is-enough-no-websocket-in-v1)
 
 ## LangGraph.js stream modes
 

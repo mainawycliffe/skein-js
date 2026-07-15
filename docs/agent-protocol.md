@@ -3,6 +3,23 @@
 skein-js implements LangChain's [**Agent Protocol**](https://github.com/langchain-ai/agent-protocol),
 an OpenAPI-specified, framework-agnostic HTTP + streaming contract for serving LLM agents.
 
+**What this gives you:** a standard REST + SSE API your client already speaks — assistants, threads,
+runs (wait / stream / background), streaming, interrupts, and a long-term store. Because it's the same
+contract LangGraph Platform serves, your existing [`@langchain/langgraph-sdk`](./react-sdk.md) and
+[`useStream`](./react-sdk.md) code works against a skein-js server by changing only the URL. You
+almost never call these endpoints by hand — the SDK does — but this page is the map of what's
+available and what ships in the MVP. For the streaming wire format, see [streaming.md](./streaming.md);
+for building a frontend on top, see [react-sdk.md](./react-sdk.md).
+
+## Contents
+
+- [Core resources](#core-resources)
+- [Endpoint inventory](#endpoint-inventory)
+- [Request/response conventions](#requestresponse-conventions)
+- [Authentication + authorization](#authentication--authorization)
+- [Conformance strategy](#conformance-strategy)
+- [References](#references)
+
 **We reuse rather than redefine the wire types.** The `@langchain/langgraph-sdk` package
 already publishes TypeScript types for Thread / Run / Assistant / Store items, and
 `@langchain/langgraph-api` publishes the server-side Zod schemas — skein-js builds on those
@@ -94,7 +111,7 @@ Priority for v1 is marked **✅ MVP**. Deferred items are noted.
 Auth is **transport-neutral**: it lives in `@skein-js/agent-protocol`, wrapping the handler table
 every adapter mounts, so Express / Fastify / Nest inherit it identically. It is active only when a
 `langgraph.json` `auth` block loads an `Auth` instance (see
-[langgraph-cli-compat.md](./langgraph-cli-compat.md#authentication--authorization)); otherwise the
+[langgraph-cli-compat.md](./langgraph-cli-compat.md#authentication--authorization-auth)); otherwise the
 server is unauthenticated.
 
 Per request the wrapper:
@@ -133,7 +150,7 @@ Route → resource/action (runs authorize through their owning thread — there 
 **Reuse & limits.** The `Auth` contract and the pure `isAuthMatching` filter semantics
 (`$eq`/`$contains`) come from `@langchain/*`; skein reimplements only the small, instance-scoped
 dispatch (langgraph-api's `registerAuth` is module-global, which skein's DI design avoids). Store
-items carry no metadata, so `store:*` handlers can deny/allow but ownership *filtering* of store
+items carry no metadata, so `store:*` handlers can deny/allow but ownership _filtering_ of store
 items is deferred; ownership filtering is applied in-process after a fetch (correct at any scale,
 with a SQL-pushdown follow-up on the roadmap for large tenants).
 

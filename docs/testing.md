@@ -1,5 +1,11 @@
 # Testing
 
+> **Contributor guide.** This describes the testing strategy for working _in_ skein-js. If you just
+> want to _use_ skein-js, start with the [README](../README.md) and [docs index](./index.md). To
+> contribute, see [CONTRIBUTING.md](../CONTRIBUTING.md) and [AGENTS.md](../AGENTS.md).
+
+<!-- -->
+
 > **Principle:** test behavior, not implementation. Fast unit tests for pure logic; real
 > infrastructure (via Testcontainers) for anything that talks to Postgres or Redis. One
 > shared contract suite so every driver behaves identically.

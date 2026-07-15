@@ -2,7 +2,7 @@
 
 > Loads an unchanged `langgraph.json`, validates it, and resolves each `path:export` graph, its schemas, and the optional custom-auth module.
 
-Part of **[skein-js](https://github.com/mainawycliffe/skein)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
+Part of **[skein-js](../../README.md)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
 
 **Status:** 🚧 Pre-alpha — implemented: `langgraph.json` loading, `path:export` graph resolution, graph-schema introspection, env resolution, and custom-auth loading.
 
@@ -40,7 +40,7 @@ Peer dependencies: `@langchain/langgraph` and `@langchain/langgraph-sdk`.
 ```ts
 import { loadConfig, loadAuthEngine } from "@skein-js/config";
 
-const { config, configDir, graphs } = await loadConfig({ cwd: projectDir });
+const { config, configDir, graphs } = await loadConfig({ configPath: "./langgraph.json" });
 
 const graph = await graphs.load("agent"); // a CompiledGraph or a per-config factory
 const schemas = await graphs.schemas("agent"); // input/output/state/config JSON schemas
@@ -73,7 +73,7 @@ Reuses `@langchain/langgraph-api`'s `./schema` parser (`getStaticGraphSchema`, `
 ## Learn more
 
 - [LangGraph CLI compatibility](../../docs/langgraph-cli-compat.md) · [Storage](../../docs/storage.md)
-- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md)
+- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md) · [Root README](../../README.md)
 
 ## License
 

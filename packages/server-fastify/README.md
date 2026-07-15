@@ -2,7 +2,7 @@
 
 > Fastify adapter for skein-js — **planned, not yet implemented**.
 
-Part of **[skein-js](https://github.com/mainawycliffe/skein)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
+Part of **[skein-js](../../README.md)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
 
 **Status:** 🗺️ Planned — after the Express adapter. This package is a placeholder: it is not
 implemented, exports no adapter API, and is **not published** to npm yet.

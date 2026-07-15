@@ -5,17 +5,65 @@ skein-js is a framework-agnostic TypeScript library that implements LangChain's
 [**LangGraph.js**](https://github.com/langchain-ai/langgraphjs), and ships a CLI that is a
 **drop-in replacement for the LangGraph CLI**.
 
+## Contents
+
+- [The problem](#the-problem)
+- [What is the Agent Protocol?](#what-is-the-agent-protocol)
+- [The solution](#the-solution)
+- [The drop-in promise](#the-drop-in-promise)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Examples](#examples)
+- [Documentation map](#documentation-map)
+- [References](#references)
+
 ## The problem
 
-There is no first-class, self-hostable way to serve LangGraph.js graphs behind a standard
-API in the Node ecosystem:
+You've built an agent as a LangGraph.js graph. On its own, a graph is a function you call
+in-process. To put it behind a chat UI or expose it to other services you need a **server** — and a
+capable agent server is a lot of plumbing:
 
-- **LangGraph Platform** (LangSmith Deployments) is hosted and closed.
-- **[aegra](https://github.com/aegra/aegra)** — the leading open self-hosted alternative — is
-  Python/FastAPI only.
+- **Threads** — conversations that persist, with full state and history.
+- **Runs** — execute the graph and either wait for the result, **stream** it, or run it in the
+  background.
+- **Streaming** — push tokens, tool calls, and reasoning to the client as they happen, with
+  reconnect/replay if a connection drops.
+- **Human-in-the-loop** — pause a run for approval and resume it later.
+- **Long-term memory** — storage that outlives a single conversation.
+- **Auth, CORS, persistence, and scaling** — the production essentials.
 
-TypeScript teams are left to adopt the hosted platform, run a Python sidecar, or hand-roll
-an HTTP layer around a compiled graph.
+There is no first-class, **self-hostable** way to get all of this for LangGraph.js in the Node
+ecosystem:
+
+- **LangGraph Platform** (now **LangSmith Deployment**) is a **paid product**. You _can_ self-host
+  it, but production self-hosting is an **Enterprise add-on requiring a commercial license key** —
+  the platform's server runtime is source-available under the
+  [Elastic License 2.0](https://www.elastic.co/licensing/elastic-license), not open source. The
+  managed **Plus** plan is **$39 / seat / month** plus usage-based deployment pricing (~$0.005 per
+  deployment run and per-minute uptime); fully self-hosted / hybrid is **Enterprise-only** with
+  custom pricing. A free **Self-Hosted Lite** exists but is node-capped and still needs a LangSmith
+  API key. ([pricing](https://www.langchain.com/pricing) ·
+  [self-hosting docs](https://docs.langchain.com/langgraph-platform/self-hosted), as of July 2026.)
+- **[aegra](https://github.com/aegra/aegra)** — the leading _open_ self-hosted alternative — is
+  **Python / FastAPI only**.
+
+TypeScript teams are left to adopt the paid platform, run a Python sidecar, or hand-roll an HTTP
+layer around a compiled graph.
+
+## What is the Agent Protocol?
+
+The [**Agent Protocol**](https://github.com/langchain-ai/agent-protocol) is the open HTTP + SSE
+standard that describes an agent server's surface — assistants, threads, runs, streaming,
+interrupts, and a store. Because it's a standard, the entire LangChain client ecosystem speaks it:
+
+- [`@langchain/langgraph-sdk`](https://www.npmjs.com/package/@langchain/langgraph-sdk) — the vanilla
+  JS client (`client.threads` / `client.runs` / …)
+- [`@langchain/langgraph-sdk/react`](https://langchain-ai.github.io/langgraphjs/) — the **`useStream`**
+  hook, streaming over SSE
+- [Agent Chat UI](https://github.com/langchain-ai/agent-chat-ui) and LangGraph Studio
+
+Implement the Agent Protocol and **all of these clients work with your server** — no custom SDK, no
+bespoke wire format. skein-js implements it; your existing clients keep working with only a URL
+change. See [agent-protocol.md](./agent-protocol.md) for the exact endpoints.
 
 ## The solution
 
@@ -47,7 +95,7 @@ skein-js by changing only a URL.
 
 ## Architecture at a glance
 
-```
+```text
              ┌─────────────────────────────────────────────┐
    clients   │  @langchain/langgraph-sdk · /react useStream │
  (unchanged) │  Agent Chat UI · LangGraph Studio            │
@@ -90,18 +138,23 @@ Runnable projects under [`examples/`](../examples) — each proves a slice of th
 
 ## Documentation map
 
+Start with the user-facing guides; the design docs at the bottom explain how skein-js is built.
+
 | Doc                                                  | Covers                                                     |
 | ---------------------------------------------------- | ---------------------------------------------------------- |
-| [reuse.md](./reuse.md)                               | **What we reuse from LangGraph OSS vs. what we rebuild**   |
-| [code-practices.md](./code-practices.md)             | Readability, functional style, simplicity conventions      |
-| [testing.md](./testing.md)                           | Unit + Testcontainers integration + conformance suite      |
-| [agent-protocol.md](./agent-protocol.md)             | The REST + streaming endpoints skein-js implements         |
 | [langgraph-cli-compat.md](./langgraph-cli-compat.md) | `langgraph.json` fields + CLI commands                     |
+| [agent-protocol.md](./agent-protocol.md)             | The REST + streaming endpoints skein-js implements         |
+| [building-an-adapter.md](./building-an-adapter.md)   | How to put skein-js on any HTTP framework (custom adapter) |
 | [streaming.md](./streaming.md)                       | LangGraph stream modes → Agent Protocol SSE                |
 | [react-sdk.md](./react-sdk.md)                       | `@langchain/langgraph-sdk` + `useStream` compatibility     |
 | [storage.md](./storage.md)                           | `SkeinStore`, in-memory + Postgres, pgvector, checkpointer |
 | [runs-and-redis.md](./runs-and-redis.md)             | Run engine, queue, cross-instance streaming                |
+| [reuse.md](./reuse.md)                               | _(design)_ What we reuse from LangGraph OSS vs. rebuild    |
+| [code-practices.md](./code-practices.md)             | _(contributor)_ Readability, functional style, conventions |
+| [testing.md](./testing.md)                           | _(contributor)_ Unit + Testcontainers + conformance suite  |
 | [roadmap.md](./roadmap.md)                           | Milestones and post-MVP non-goals                          |
+
+Want to contribute? See [CONTRIBUTING.md](../CONTRIBUTING.md) and [AGENTS.md](../AGENTS.md).
 
 ## References
 

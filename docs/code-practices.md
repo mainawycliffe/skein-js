@@ -1,5 +1,11 @@
 # Code practices
 
+> **Contributor guide.** This codifies the coding conventions for working _in_ skein-js. If you just
+> want to _use_ skein-js, start with the [README](../README.md) and [docs index](./index.md). To
+> contribute, see [CONTRIBUTING.md](../CONTRIBUTING.md) and [AGENTS.md](../AGENTS.md).
+
+<!-- -->
+
 > **Goal:** code that is kind to your future self — readable, simple, and neat. When in
 > doubt, choose the version that is easier to _read_, not the one that is clever to write.
 

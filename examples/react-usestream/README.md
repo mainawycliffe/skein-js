@@ -1,15 +1,23 @@
 # `react-usestream` example
 
-A minimal Next.js app that streams from a **skein-js** server using
+The **frontend harness**: a minimal Next.js app that streams from **any** skein-js server using
 [`@langchain/langgraph-sdk/react`](https://www.npmjs.com/package/@langchain/langgraph-sdk)'s
-`useStream` hook. It is the front-end harness for verifying that skein-js's SSE wiring
-satisfies the LangChain React SDK — token-by-token streaming in a real browser.
+`useStream` hook. Point it at a backend, send a message, and watch the reply stream in
+token-by-token in a real browser.
 
 See [`../../docs/react-sdk.md`](../../docs/react-sdk.md).
 
-## Run
+## What you'll learn
 
-This is the frontend half of the end-to-end demo. Start a skein-js backend first, then this app.
+- **How a browser consumes a skein-js SSE server.** The `useStream` hook subscribes to the Agent
+  Protocol stream and renders tokens as they arrive — the front-end signal that skein-js's SSE wiring
+  satisfies the LangChain React SDK.
+- **Retargeting via env.** `NEXT_PUBLIC_SKEIN_URL` and `NEXT_PUBLIC_SKEIN_ASSISTANT_ID` aim the app
+  at any skein-js server and graph id — no code change.
+
+## How to run
+
+This is the frontend half of an end-to-end demo. Start a skein-js backend first, then this app.
 
 1. **Backend** — in one terminal, run the [`gemini-chat`](../gemini-chat) example (a real Gemini
    agent), which listens on `http://localhost:2024` and serves the `gemini` assistant:
@@ -17,7 +25,7 @@ This is the frontend half of the end-to-end demo. Start a skein-js backend first
    ```bash
    cd ../gemini-chat
    cp .env.example .env               # paste your GOOGLE_API_KEY
-   pnpm install && pnpm dev           # skein dev --port 2024
+   pnpm install && pnpm dev           # → skein dev --port 2024
    ```
 
 2. **Frontend** — in a second terminal:
@@ -25,11 +33,16 @@ This is the frontend half of the end-to-end demo. Start a skein-js backend first
    ```bash
    cp .env.local.example .env.local   # already points at :2024, assistant `gemini`
    pnpm install
-   pnpm dev                           # http://localhost:3005
+   pnpm dev                           # → next dev on http://localhost:3005
    ```
 
-Open <http://localhost:3005>, send a message, and watch the reply stream in token-by-token — the
-front-end signal that skein-js's SSE wiring satisfies the LangChain React SDK.
+Open <http://localhost:3005>, send a message, and watch the reply stream in token-by-token.
 
-> Point it anywhere: `NEXT_PUBLIC_SKEIN_URL` and `NEXT_PUBLIC_SKEIN_ASSISTANT_ID` let you aim this
+> **Point it anywhere.** Set `NEXT_PUBLIC_SKEIN_URL` and `NEXT_PUBLIC_SKEIN_ASSISTANT_ID` to aim this
 > at any skein-js server and graph id (e.g. the [`express-basic`](../express-basic) `agent` graph).
+
+## What to look at
+
+- [`app/page.tsx`](./app/page.tsx) — the entire `useStream` wiring:
+  `useStream({ apiUrl, assistantId })`, then `thread.submit({ messages: [{ type: "human", content }] })`
+  to send a turn and render `thread.messages` as tokens stream in.

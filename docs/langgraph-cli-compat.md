@@ -3,6 +3,15 @@
 skein-js's headline goal is to be a **drop-in replacement for the LangGraph CLI**. That means
 two things: read the same `langgraph.json`, and mirror the same command surface.
 
+## Contents
+
+- [Command mapping](#command-mapping)
+- [Under the hood: what skein-js changes (transparently)](#under-the-hood-what-skein-js-changes-transparently)
+- [`langgraph.json` — fields we honor](#langgraphjson--fields-we-honor)
+- [Graph loading (`path:export` notation)](#graph-loading-pathexport-notation)
+- [Authentication + authorization (`auth`)](#authentication--authorization-auth)
+- [`dev` vs `up`](#dev-vs-up)
+
 ## Command mapping
 
 | LangGraph CLI          | skein-js           | Behavior                                                       |
@@ -38,6 +47,39 @@ References:
 
 - LangGraph CLI docs — <https://docs.langchain.com/langsmith/cli>
 - `@langchain/langgraph-cli` (npm) — <https://www.npmjs.com/package/@langchain/langgraph-cli>
+
+## Under the hood: what skein-js changes (transparently)
+
+skein-js keeps the **contract** identical — same `langgraph.json`, same graph code, same Agent
+Protocol on the wire, same clients — while re-implementing the runtime underneath with a different,
+open, self-hostable set of building blocks. None of this requires a change on your side; it's the
+"drop-in" promise honored at the implementation level.
+
+**Same graph code, same config, same wire protocol.** skein-js reuses the LangGraph runtime,
+checkpointers, the `langgraph.json` parser/schemas, and the SDK/types from the open
+`@langchain/*` packages (see [reuse.md](./reuse.md)). It only rebuilds the durable-production,
+multi-framework, drop-in-CLI layer that isn't open — so your project moves over untouched.
+
+**What we implement, and the tools we use:**
+
+| Concern                  | skein-js implementation                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| CLI                      | [commander](https://github.com/tj/commander.js) — the `skein dev`/`up`/`build`/`dockerfile` command surface.                               |
+| Dev graph loading        | [vite](https://vitejs.dev) loads your TypeScript graphs **in-process** — no separate build step.                                           |
+| Dev hot reload           | **State-preserving** reload on source change: your threads, runs, and memory survive the reload.                                           |
+| Dev persistence          | Dev state is snapshotted to `.skein/` so it survives restarts (opt out with `--no-persist`).                                               |
+| Run queue (prod)         | [BullMQ](https://docs.bullmq.io) on Redis — background runs, retries, backoff, and crash recovery.                                         |
+| Cross-instance streaming | [ioredis](https://github.com/redis/ioredis) + **Redis Streams**/pub-sub — join a run's SSE stream from any instance.                       |
+| Postgres store (prod)    | [pg](https://node-postgres.com) + [node-pg-migrate](https://github.com/salsita/node-pg-migrate) migrations + **pgvector** semantic search. |
+| Checkpoints (prod)       | LangGraph-native [`PostgresSaver`](https://www.npmjs.com/package/@langchain/langgraph-checkpoint-postgres) — reused, not reinvented.       |
+
+**Transparent improvements over `langgraph dev`.** Because the storage/queue are pluggable drivers,
+`skein dev` can run against **production-shaped** Postgres/Redis **without Docker** (`--store
+postgres --queue redis`), and dev state persists across restarts — both beyond the stock LangGraph
+CLI dev server, and both fully opt-in. The wire behavior your clients see is unchanged either way.
+
+If any of this ever _does_ change observable behavior versus the LangGraph CLI, that's a
+compatibility bug — please [report it](https://github.com/mainawycliffe/skein-js/issues).
 
 ## `langgraph.json` — fields we honor
 

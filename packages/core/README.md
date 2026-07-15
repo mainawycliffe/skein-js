@@ -2,9 +2,19 @@
 
 > The shared Agent Protocol **contract** for skein-js — wire types, the `SkeinStore` interface, the queue / bus / auth seams, and the edge error type.
 
-Part of **[skein-js](https://github.com/mainawycliffe/skein)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
+Part of **[skein-js](../../README.md)** — a TypeScript [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server for [LangGraph.js](https://github.com/langchain-ai/langgraphjs), and a drop-in replacement for the LangGraph CLI.
 
 **Status:** 🚧 Pre-alpha — implemented. The run engine, handler table, and SSE mapping that build on this contract live in [`@skein-js/agent-protocol`](../agent-protocol).
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Install](#install)
+- [Usage](#usage)
+- [API](#api)
+- [Reuse](#reuse)
+- [Learn more](#learn-more)
+- [License](#license)
 
 ## What it does
 
@@ -83,7 +93,7 @@ in [`@skein-js/agent-protocol`](../agent-protocol) — never a reimplemented run
 ## Learn more
 
 - [Agent Protocol surface](../../docs/agent-protocol.md) · [Storage](../../docs/storage.md)
-- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md)
+- [skein-js overview](../../docs/index.md) · [Reuse-first architecture](../../docs/reuse.md) · [Root README](../../README.md)
 
 ## License
 

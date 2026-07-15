@@ -4,6 +4,37 @@ A core promise of skein-js: **your existing frontend code keeps working by chang
 API URL.** That includes the React streaming hook, which is the most common way LangGraph
 apps render agent output.
 
+**What this gives you:** point [`useStream`](https://langchain-ai.github.io/langgraphjs/) at a
+skein-js server and you get the whole rich chat UX for free — live token streaming, model
+**thinking**, structured **tool-result cards**, and **human-in-the-loop** interrupt/resume — with no
+custom SDK and no bespoke wire format. You send a turn with `thread.submit(...)`, read live state off
+`thread.messages`, and when a graph node pauses with `interrupt()` you render an approval card off
+`thread.interrupt` and resume with a `command`. The flagship [`chat-app`](../examples/chat-app)
+example builds all of this; [`react-usestream`](../examples/react-usestream) is the minimal
+copy-paste starting point.
+
+```tsx
+// send a turn — thread.messages updates live as tokens stream in
+thread.submit({ messages: [{ type: "human", content: input }] });
+
+// a pending interrupt (e.g. "approve this booking?") surfaces here; resume with a command
+if (thread.interrupt) {
+  thread.submit(undefined, { command: { resume: { approved: true } } });
+}
+```
+
+Long-term memory is the one piece that lives on the server, not in the hook: a graph node calls
+`getStore()` and skein-js persists it (see [storage.md](./storage.md)). The frontend just keeps
+streaming.
+
+## Contents
+
+- [The clients skein-js must satisfy](#the-clients-skein-js-must-satisfy)
+- [`useStream` against skein-js](#usestream-against-skein-js)
+- [Why it works over SSE](#why-it-works-over-sse)
+- [Verification harness](#verification-harness)
+- [References](#references)
+
 ## The clients skein-js must satisfy
 
 | Client           | Package                          | How it talks to skein-js                                         |
