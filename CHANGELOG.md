@@ -1,3 +1,14 @@
+## 0.5.0 (2026-07-16)
+
+### 🚀 Features
+
+- **agent-protocol:** inject authenticated user into run config ([#3](https://github.com/mainawycliffe/skein/issues/3))
+- **cli:** ship a pre-built production image via skein start ([#2](https://github.com/mainawycliffe/skein/issues/2))
+
+### ❤️ Thank You
+
+- Maina Wycliffe
+
 ## 0.4.0 (2026-07-16)
 
 ### 🚀 Features
