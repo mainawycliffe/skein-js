@@ -64,6 +64,39 @@ describe("run service", () => {
     expect(received[0]).toEqual({ run_id: run.run_id, thread_id: thread.thread_id });
   });
 
+  it("stamps the request's authenticated user onto the run's kwargs for the engine to inject", async () => {
+    const deps = createFixtureDeps();
+    const authUser = {
+      identity: "u1",
+      display_name: "u1",
+      is_authenticated: true,
+      permissions: ["read"],
+    };
+    const ctx = { ...createContext(deps), authUser, authScopes: ["run:write"] };
+    const service = buildProtocolService(ctx);
+    await service.assistants.registerGraphAssistants();
+    const thread = await service.threads.create();
+    const run = await service.runs.createBackground(thread.thread_id, {
+      assistant_id: "echo",
+      input: {},
+    });
+    // Persisted opaquely so a worker on another instance reconstructs the principal via getKwargs.
+    const kwargs = await deps.store.runs.getKwargs(run.run_id);
+    expect(kwargs?.auth_user).toEqual(authUser);
+    expect(kwargs?.auth_scopes).toEqual(["run:write"]);
+  });
+
+  it("omits auth_user from kwargs when no user is authenticated (no auth configured)", async () => {
+    const deps = createFixtureDeps();
+    const { service } = await serviceWithAssistants(deps);
+    const thread = await service.threads.create();
+    const run = await service.runs.createBackground(thread.thread_id, {
+      assistant_id: "echo",
+      input: {},
+    });
+    expect((await deps.store.runs.getKwargs(run.run_id))?.auth_user).toBeUndefined();
+  });
+
   it("rejects a second concurrent run on the same thread with a 409", async () => {
     const { service } = await serviceWithAssistants();
     const thread = await service.threads.create();

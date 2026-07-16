@@ -30,7 +30,7 @@ import { SkeinBaseStore } from "../store/skein-base-store.js";
 import { runStatusForSnapshot, snapshotToThreadUpdate } from "../threads/thread-mirror.js";
 
 import type { RunControl } from "./cancellation.js";
-import { toGraphCallOptions, toGraphInput } from "./run-input.js";
+import { toFactoryConfigurable, toGraphCallOptions, toGraphInput } from "./run-input.js";
 import { describeInterrupts, extractToolActivity } from "./run-log.js";
 
 /** What the engine needs to execute one run. */
@@ -62,7 +62,10 @@ async function resolveGraph(
   const resolved = await deps.graphs.load(graphId);
   const graph =
     typeof resolved === "function"
-      ? await resolved({ configurable: kwargs.config?.configurable })
+      ? // Expose the authenticated caller to a graph *factory* too, so a factory that branches on the
+        // principal sees the same `langgraph_auth_user` a node reads — sanitized identically, so a
+        // client can't spoof it via its own configurable.
+        await resolved({ configurable: toFactoryConfigurable(kwargs) })
       : resolved;
   (graph as { checkpointer?: unknown }).checkpointer = deps.checkpointer;
   (graph as { store?: unknown }).store = new SkeinBaseStore(deps.store.store);

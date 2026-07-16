@@ -3,7 +3,7 @@
 // signal). Kept separate from the engine so the mapping is easy to test on its own.
 
 import { Command, type CommandParams } from "@langchain/langgraph";
-import type { RunKwargs, StreamMode } from "@skein-js/core";
+import type { AuthUser, RunKwargs, StreamMode } from "@skein-js/core";
 
 /** SDK stream modes mapped to the graph's stream vocabulary. Unknown modes fall back to values. */
 function toGraphMode(mode: StreamMode): StreamMode {
@@ -33,8 +33,9 @@ export function toGraphInput(kwargs: RunKwargs): unknown {
 }
 
 // Configurable keys the server owns: a client must not set the checkpoint target, run/thread
-// identity, or LangGraph-internal (`__`-prefixed) keys, or it could redirect a run to another
-// checkpoint or spoof run wiring. `thread_id` is set by the server regardless (see below).
+// identity, LangGraph-internal (`__`-prefixed) keys, or the authenticated principal, or it could
+// redirect a run to another checkpoint, spoof run wiring, or impersonate another caller. `thread_id`
+// and the `langgraph_auth_*` keys are set by the server regardless (see below).
 const RESERVED_CONFIGURABLE_KEYS = new Set([
   "thread_id",
   "run_id",
@@ -42,6 +43,9 @@ const RESERVED_CONFIGURABLE_KEYS = new Set([
   "checkpoint_ns",
   "checkpoint_map",
   "checkpoint",
+  "langgraph_auth_user",
+  "langgraph_auth_user_id",
+  "langgraph_auth_permissions",
 ]);
 
 function sanitizeConfigurable(
@@ -54,6 +58,45 @@ function sanitizeConfigurable(
     clean[key] = value;
   }
   return clean;
+}
+
+/**
+ * Merge the authenticated caller into a `configurable`, matching LangGraph exactly — the three keys,
+ * order, and values mirror `@langchain/langgraph-api`'s `applyAuthToRunConfig`: `langgraph_auth_user`
+ * is the full user object (custom fields included), `langgraph_auth_user_id` is its `identity`, and
+ * `langgraph_auth_permissions` is the caller's authenticated `scopes` (falling back to the user's
+ * `permissions` when a run carries no separate scopes — the two are identical for the config-loaded
+ * `Auth`). Server-owned, so it's added last and, being reserved, can't be spoofed by the client's own
+ * configurable. A no-op when the run carries no principal (no auth configured) — matching
+ * `langgraph dev`, so no keys appear.
+ */
+export function withAuthUser(
+  configurable: Record<string, unknown>,
+  authUser: AuthUser | undefined,
+  scopes?: string[],
+): Record<string, unknown> {
+  if (!authUser) return configurable;
+  return {
+    ...configurable,
+    langgraph_auth_user: authUser,
+    langgraph_auth_user_id: authUser.identity,
+    langgraph_auth_permissions: scopes ?? authUser.permissions,
+  };
+}
+
+/**
+ * The `configurable` for a graph *factory* export: the client's config with server-owned keys
+ * stripped (so a factory can never be fed a spoofed `langgraph_auth_user` or a redirected checkpoint —
+ * same guard the node path applies) and the authenticated caller stamped on. Returns `undefined` when
+ * nothing remains, preserving the shape a factory sees for a run with no config and no principal.
+ */
+export function toFactoryConfigurable(kwargs: RunKwargs): Record<string, unknown> | undefined {
+  const configurable = withAuthUser(
+    sanitizeConfigurable(kwargs.config?.configurable),
+    kwargs.auth_user,
+    kwargs.auth_scopes,
+  );
+  return Object.keys(configurable).length > 0 ? configurable : undefined;
 }
 
 /** LangGraph call options assembled for a run. Cast to the graph's `Partial<PregelOptions>` at use. */
@@ -78,8 +121,13 @@ export function toGraphCallOptions(
   signal: AbortSignal,
 ): GraphCallOptions {
   const options: GraphCallOptions = {
-    // Drop server-owned keys from the client's configurable, then force this thread's id.
-    configurable: { ...sanitizeConfigurable(kwargs.config?.configurable), thread_id: threadId },
+    // Drop server-owned keys from the client's configurable, force this thread's id, then stamp the
+    // authenticated caller so the graph can authorize off `configurable.langgraph_auth_user`.
+    configurable: withAuthUser(
+      { ...sanitizeConfigurable(kwargs.config?.configurable), thread_id: threadId },
+      kwargs.auth_user,
+      kwargs.auth_scopes,
+    ),
     streamMode: normalizeModes(kwargs.stream_mode),
     signal,
   };

@@ -9,6 +9,7 @@ import {
   type AuthEngine,
   type AuthFilters,
 } from "@skein-js/core";
+import { MemorySkeinStore } from "@skein-js/storage-memory";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { createFixtureDeps } from "../__fixtures__/deps.js";
@@ -169,6 +170,71 @@ describe("authorizing handlers", () => {
         ),
         401,
       );
+    });
+  });
+
+  // The authenticated caller (with any custom fields) must survive into the run's stored kwargs so
+  // the run engine can inject `configurable.langgraph_auth_user`, matching LangGraph Platform. Kwargs
+  // are stored at creation (before any worker runs), so we inspect the underlying store directly.
+  describe("principal injection", () => {
+    // Own the store so we can read back the stored kwargs; the auth wrapper only swaps it per request.
+    const store = new MemorySkeinStore();
+    const withAuth = async (auth: AuthEngine) => {
+      const runtime = createProtocolRuntime(createFixtureDeps({ store, auth }));
+      await runtime.service.assistants.registerGraphAssistants();
+      return runtime;
+    };
+    const startBackgroundRun = async (runtime: ProtocolRuntime, req: ProtocolRequest) => {
+      const created = await runtime.handlers.createThread({ ...req, method: "POST", body: {} });
+      const threadId = (created as { body: { thread_id: string } }).body.thread_id;
+      const started = await runtime.handlers.createBackgroundRun({
+        ...req,
+        method: "POST",
+        params: { thread_id: threadId },
+        body: { assistant_id: "echo", input: {} },
+      });
+      const runId = (started as { body: { run_id: string } }).body.run_id;
+      return store.runs.getKwargs(runId);
+    };
+
+    it("stamps the caller (with custom fields) onto run kwargs on the owner-scoped path", async () => {
+      const engine: AuthEngine = {
+        ...fakeEngine(),
+        authenticate: async (request) => {
+          const identity = request.headers.get("x-user");
+          if (!identity) throw SkeinHttpError.unauthorized("missing credentials");
+          return {
+            user: {
+              identity,
+              display_name: identity,
+              is_authenticated: true,
+              permissions: [],
+              workspaceId: "ws-1",
+            },
+            scopes: [],
+          };
+        },
+      };
+      const kwargs = await startBackgroundRun(await withAuth(engine), asUser("alice"));
+      expect(kwargs?.auth_user?.identity).toBe("alice");
+      expect(kwargs?.auth_user?.["workspaceId"]).toBe("ws-1");
+    });
+
+    it("stamps the caller even when authorization returns no ownership filters", async () => {
+      const openEngine: AuthEngine = {
+        ...fakeEngine(),
+        authorize: async ({ value }) => ({ filters: undefined, value }),
+      };
+      const kwargs = await startBackgroundRun(await withAuth(openEngine), asUser("bob"));
+      expect(kwargs?.auth_user?.identity).toBe("bob");
+    });
+
+    it("stamps the synthetic studio user for studio traffic", async () => {
+      const kwargs = await startBackgroundRun(
+        await withAuth(fakeEngine()),
+        makeReq({ headers: { "x-auth-scheme": "langsmith" } }),
+      );
+      expect(kwargs?.auth_user?.identity).toBe("langgraph-studio-user");
     });
   });
 

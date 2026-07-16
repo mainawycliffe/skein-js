@@ -7,6 +7,7 @@
 // conformance suite, so they behave identically. Methods return the wire types from
 // `../wire`, so a handler can pass a repo result straight to the client.
 
+import type { AuthUser } from "../auth/auth.js";
 import type {
   Assistant,
   Config,
@@ -140,6 +141,18 @@ export interface RunKwargs {
   stream_mode?: StreamMode | StreamMode[];
   interrupt_before?: string[] | "*";
   interrupt_after?: string[] | "*";
+  /**
+   * The authenticated caller, stamped by the server (never accepted from the client). Persisted
+   * opaquely with the run so a background/crash-recovered run on another instance reconstructs the
+   * principal via `getKwargs` and injects it into the graph's `configurable.langgraph_auth_user`.
+   */
+  auth_user?: AuthUser;
+  /**
+   * The caller's authenticated permission scopes (the `AuthContext.scopes`), stamped alongside
+   * {@link auth_user}. Injected as `configurable.langgraph_auth_permissions`, matching LangGraph
+   * (which sources permissions from the auth scopes, not from the user object's `permissions`).
+   */
+  auth_scopes?: string[];
 }
 
 export interface RunCreate {

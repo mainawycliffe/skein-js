@@ -134,15 +134,25 @@ Per request the wrapper:
 2. **Authorizes** — looks up the route's resource + action, runs the matching `@auth.on.*` handler
    (priority: `resource:action` → `resource` → `*:action` → `*`) → `403` on `false`, else ownership
    **filters**.
-3. **Dispatches** — when filters were returned, through a per-request service whose `SkeinStore` is
-   an auth-scoped decorator closed over those filters (the shared cancellation registry + thread
-   locks are reused; only the store is swapped). The decorator filters reads (a non-owned row reads
-   as absent → `404`, never `403`), and stamps the filter's values onto created rows so later reads
-   match. It scopes only the `threads` family — threads + their runs (runs inherit their thread's
-   owner). `assistants` and `store` are gate-only: their `@auth.on.*` handlers can deny (`403`), but
-   no ownership filter is applied — graph assistants are auto-registered with no owner and must stay
-   visible to run, and store items carry no metadata to filter on (per-owner scoping of both is a
-   Depth-2 follow-up).
+3. **Dispatches** — through a per-request service that carries the authenticated `user`; when
+   filters were returned its `SkeinStore` is also an auth-scoped decorator closed over those filters
+   (the shared cancellation registry + thread locks are reused; only the store is swapped). The
+   decorator filters reads (a non-owned row reads as absent → `404`, never `403`), and stamps the
+   filter's values onto created rows so later reads match. It scopes only the `threads` family —
+   threads + their runs (runs inherit their thread's owner). `assistants` and `store` are gate-only:
+   their `@auth.on.*` handlers can deny (`403`), but no ownership filter is applied — graph assistants
+   are auto-registered with no owner and must stay visible to run, and store items carry no metadata
+   to filter on (per-owner scoping of both is a Depth-2 follow-up).
+
+**Principal in the run config.** A run stores the authenticated caller on its (opaque) kwargs, so the
+run engine injects it into the graph's `configurable` — matching `@langchain/langgraph-api`'s
+`applyAuthToRunConfig`. Graph nodes and tools read it exactly as on LangGraph Platform:
+`config.configurable.langgraph_auth_user` (the full user object, custom fields included), plus
+`langgraph_auth_user_id` (the caller's `identity`) and `langgraph_auth_permissions` (their scopes).
+These three keys are server-owned and reserved: a client cannot spoof them via its own `configurable`.
+Persisting on the run (not just request memory) means a background run picked up by a worker on
+another instance still injects the same principal. When no `auth` is configured, no keys are added —
+identical to `langgraph dev`.
 
 Route → resource/action (runs authorize through their owning thread — there is no `runs` resource):
 

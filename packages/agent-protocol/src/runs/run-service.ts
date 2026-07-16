@@ -6,6 +6,7 @@ import {
   isTerminalRunStatus,
   SkeinHttpError,
   type Assistant,
+  type AuthUser,
   type Config,
   type DefaultValues,
   type Metadata,
@@ -56,8 +57,12 @@ export interface RunService {
   finalStatus(runId: string): Promise<RunStatus | null>;
 }
 
-/** Keep only the defined fields, so a run's stored kwargs stay minimal. */
-function toKwargs(input: CreateRunInput): RunKwargs {
+/**
+ * Keep only the defined fields, so a run's stored kwargs stay minimal. The authenticated caller (and
+ * its scopes) is stamped by the server (from the request context, never the client body) so the run
+ * engine can inject it into the graph's `configurable.langgraph_auth_user`.
+ */
+function toKwargs(input: CreateRunInput, authUser?: AuthUser, authScopes?: string[]): RunKwargs {
   const kwargs: RunKwargs = {};
   if (input.input !== undefined) kwargs.input = input.input;
   if (input.command !== undefined) kwargs.command = input.command;
@@ -66,11 +71,16 @@ function toKwargs(input: CreateRunInput): RunKwargs {
   if (input.stream_mode !== undefined) kwargs.stream_mode = input.stream_mode;
   if (input.interrupt_before !== undefined) kwargs.interrupt_before = input.interrupt_before;
   if (input.interrupt_after !== undefined) kwargs.interrupt_after = input.interrupt_after;
+  // Scopes only ride along with a principal; storing them alone would be meaningless.
+  if (authUser !== undefined) {
+    kwargs.auth_user = authUser;
+    if (authScopes !== undefined) kwargs.auth_scopes = authScopes;
+  }
   return kwargs;
 }
 
 export function createRunService(ctx: ProtocolContext): RunService {
-  const { deps, control, locks } = ctx;
+  const { deps, control, locks, authUser, authScopes } = ctx;
 
   const requireThread = async (threadId: string): Promise<Thread> => {
     const thread = await deps.store.threads.get(threadId);
@@ -160,7 +170,7 @@ export function createRunService(ctx: ProtocolContext): RunService {
     async createWait(input) {
       const assistant = await requireAssistant(input.assistant_id);
       const thread = await ensureThread(input.thread_id);
-      const kwargs = toKwargs(input);
+      const kwargs = toKwargs(input, authUser, authScopes);
       const run = await createPendingRun(input, thread.thread_id, assistant.assistant_id, kwargs);
       await stampGraphOnThread(thread, assistant);
       const outcome = await runInline(run, kwargs);
@@ -170,7 +180,7 @@ export function createRunService(ctx: ProtocolContext): RunService {
     async createStream(input) {
       const assistant = await requireAssistant(input.assistant_id);
       const thread = await ensureThread(input.thread_id);
-      const kwargs = toKwargs(input);
+      const kwargs = toKwargs(input, authUser, authScopes);
       const run = await createPendingRun(input, thread.thread_id, assistant.assistant_id, kwargs);
       await stampGraphOnThread(thread, assistant);
       // Kick off execution; the subscription below replays from seq 0 (frames are buffered), so
@@ -184,7 +194,7 @@ export function createRunService(ctx: ProtocolContext): RunService {
     async createBackground(threadId, input) {
       const assistant = await requireAssistant(input.assistant_id);
       const thread = await requireThread(threadId);
-      const kwargs = toKwargs(input);
+      const kwargs = toKwargs(input, authUser, authScopes);
       const run = await createPendingRun(
         { ...input, thread_id: threadId },
         threadId,

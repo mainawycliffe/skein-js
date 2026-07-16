@@ -3,11 +3,15 @@
 // `@skein-js/config` loads that instance and adapts it to the injectable `AuthEngine` below, which
 // `@skein-js/agent-protocol` consults per request. The contract lives in core (with the wire types)
 // so both the loader and the protocol handlers depend on one seam, never on the SDK's auth types
-// directly. See docs/agent-protocol.md for the request lifecycle.
+// directly. The SDK's `BaseUser` is internal (its public `/auth` entry exports only `Auth`,
+// `HTTPException`, `isStudioUser`, `AuthFilters`), so we mirror its normalized shape here — kept
+// open so adopters can attach their own fields. See docs/agent-protocol.md for the request lifecycle.
 
 /**
- * The authenticated caller, normalized to the shape LangGraph produces: a required `identity`,
- * `permissions` scopes, and open extra keys a handler may attach (e.g. `email`, `org_id`).
+ * The authenticated caller, normalized to the shape LangGraph's `Auth` produces: a required
+ * `identity`, `display_name`, `is_authenticated`, and `permissions` scopes, plus open extra keys a
+ * handler may attach (e.g. `email`, `org_id`). Structurally identical to the SDK's internal
+ * `BaseUser`, so a graph written for LangGraph Platform reads the same `langgraph_auth_user`.
  */
 export interface AuthUser {
   identity: string;

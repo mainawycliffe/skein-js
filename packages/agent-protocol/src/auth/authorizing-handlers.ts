@@ -32,8 +32,10 @@ export function createAuthorizingHandlers(
   context: ProtocolContext,
   engine: AuthEngine,
 ): ProtocolHandlers {
+  // The shared, unscoped handler table — built once and reused on the fast path (no principal, no
+  // ownership filters), so a request with nothing to inject skips rebuilding the service.
   const baseHandlers = createProtocolHandlers(buildProtocolService(context));
-  const names = Object.keys(baseHandlers) as (keyof ProtocolHandlers)[];
+  const names = Object.keys(ROUTE_AUTHZ) as (keyof ProtocolHandlers)[];
 
   const resolveAuthContext = async (
     req: Parameters<ProtocolHandlers[keyof ProtocolHandlers]>[0],
@@ -55,15 +57,25 @@ export function createAuthorizingHandlers(
         value: authValue(req),
         context: authContext,
       });
-      // No ownership filters: authorization passed with nothing to scope — dispatch unscoped.
-      if (!filters) return baseHandlers[name](req);
+      // Fast path: nothing request-specific to inject — reuse the shared, once-built handler table.
+      if (!filters && !authContext) return baseHandlers[name](req);
 
-      const scopedStore = createAuthScopedStore(context.deps.store, engine, filters, route.resource);
-      const scopedContext: ProtocolContext = {
+      // Otherwise dispatch through a per-request context carrying the authenticated caller (so the run
+      // service stamps it onto the run → `configurable.langgraph_auth_user`) and, when the handler
+      // returned ownership filters, the auth-scoped store. The shared cancellation registry and thread
+      // locks are inherited so background-run cancellation still works.
+      const requestContext: ProtocolContext = {
         ...context,
-        deps: { ...context.deps, store: scopedStore },
+        authUser: authContext?.user,
+        authScopes: authContext?.scopes,
+        deps: filters
+          ? {
+              ...context.deps,
+              store: createAuthScopedStore(context.deps.store, engine, filters, route.resource),
+            }
+          : context.deps,
       };
-      return createProtocolHandlers(buildProtocolService(scopedContext))[name](req);
+      return createProtocolHandlers(buildProtocolService(requestContext))[name](req);
     };
   }
   return wrapped;
