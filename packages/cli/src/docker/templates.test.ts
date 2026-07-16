@@ -59,6 +59,13 @@ describe("generateDockerfile", () => {
     expect(out).toContain("--mount=type=cache");
   });
 
+  it("mounts an optional npmrc secret on the install step for private-registry auth", () => {
+    const out = generateDockerfile({ port: 8123 });
+    expect(out).toContain("--mount=type=secret,id=npmrc,target=/app/.npmrc");
+    // The secret must be mounted for the dependency install, i.e. before the artifact `COPY . .`.
+    expect(out.indexOf("--mount=type=secret,id=npmrc")).toBeLessThan(out.indexOf("COPY . ."));
+  });
+
   it("omits --port so the container binds the platform-injected PORT", () => {
     const out = generateDockerfile({ port: 8123 });
     // Exec-form CMD keeps node as PID 1 for graceful SIGTERM; --host stays, --port is dropped.
@@ -87,5 +94,26 @@ describe("generateCompose", () => {
     expect(generateCompose({ hostPort: 9000, host: "127.0.0.1", containerPort: 8123 })).toContain(
       '- "127.0.0.1:9000:8123"',
     );
+  });
+
+  it("keeps a terse `build: .` and emits no secrets block without an npmrc", () => {
+    const out = generateCompose({ hostPort: 8123, host: "0.0.0.0", containerPort: 8123 });
+    expect(out).toContain("build: .");
+    expect(out).not.toContain("secrets:");
+  });
+
+  it("wires the npmrc as a build secret when given one", () => {
+    const out = generateCompose({
+      hostPort: 8123,
+      host: "0.0.0.0",
+      containerPort: 8123,
+      npmrcPath: "/home/me/.npmrc",
+    });
+    expect(out).not.toContain("build: .");
+    expect(out).toContain("context: .");
+    // The app build references the `npmrc` secret, defined at the top level pointing at the host file.
+    expect(out).toMatch(/secrets:\s*\n\s*- npmrc/);
+    // The path is emitted as a quoted YAML scalar so unusual paths can't corrupt the document.
+    expect(out).toContain('npmrc:\n    file: "/home/me/.npmrc"');
   });
 });

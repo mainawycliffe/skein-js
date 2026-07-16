@@ -52,14 +52,18 @@ LangGraph Studio — any Agent Protocol client works with only a URL change. See
 
 ## Commands
 
-| Command            | What it does                                                   | LangGraph CLI equivalent | Key flags                                      |
-| ------------------ | -------------------------------------------------------------- | ------------------------ | ---------------------------------------------- |
-| `skein dev`        | In-process dev server, hot reload, `.skein/` state, no Docker. | `langgraph dev`          | see [`skein dev` flags](#skein-dev-flags)      |
-| `skein up`         | Self-hosted stack via Docker Compose (app + Postgres + Redis). | `langgraph up`           | `-p, --port` (8123) · `--host` (0.0.0.0)       |
-| `skein build`      | Build a deployable Docker image from the config.               | `langgraph build`        | `-t, --tag` (defaults to the project dir name) |
-| `skein dockerfile` | Emit a standalone Dockerfile (stdout by default).              | `langgraph dockerfile`   | `-o, --output <path>`                          |
+| Command            | What it does                                                   | LangGraph CLI equivalent | Key flags                                                             |
+| ------------------ | -------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------- |
+| `skein dev`        | In-process dev server, hot reload, `.skein/` state, no Docker. | `langgraph dev`          | see [`skein dev` flags](#skein-dev-flags)                             |
+| `skein up`         | Self-hosted stack via Docker Compose (app + Postgres + Redis). | `langgraph up`           | `-p, --port` (8123) · `--host` (0.0.0.0) · `-n, --npmrc <path>`       |
+| `skein build`      | Build a deployable Docker image from the config.               | `langgraph build`        | `-t, --tag` (defaults to the project dir name) · `-n, --npmrc <path>` |
+| `skein dockerfile` | Emit a standalone Dockerfile (stdout by default).              | `langgraph dockerfile`   | `-o, --output <path>`                                                 |
 
 All commands take `-c, --config <path>` (default `langgraph.json`).
+
+`--npmrc <path>` (on `build`/`up`) mounts an `.npmrc` as a BuildKit secret so the image's dependency
+install can authenticate against a **private/authenticated npm registry** without baking a token into
+any layer. Public-registry builds don't need it.
 
 ## `skein dev` flags
 

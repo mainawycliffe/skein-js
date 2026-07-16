@@ -42,6 +42,18 @@ Graph hot-reload works with any driver; the `.skein/` snapshot is skipped for du
 (they persist inherently). `skein up`/`build`/`dockerfile` accept `--tag` (build) and `--output`
 (dockerfile) in addition to `--config`.
 
+**Private/authenticated npm registries.** When your production dependencies include private scoped
+packages (e.g. `@myorg/*` behind a token), pass an `.npmrc` so the image's dependency install can
+authenticate. `skein build --npmrc <path>` and `skein up --npmrc <path>` mount it as a BuildKit
+**secret** — it authenticates the install without ever landing in an image layer or build history.
+The generated Dockerfile always declares this secret mount (`id=npmrc`); it is optional, so
+public-registry builds that pass no `.npmrc` are unaffected. Building the standalone `skein dockerfile`
+output by hand? Supply the same secret directly:
+
+```bash
+docker build --secret id=npmrc,src=$HOME/.npmrc -t my-app .
+```
+
 `skein build`/`up` also emit a `.dockerignore` that excludes `.env*`, `node_modules`, `.git`, and
 `.skein` — so secrets are **never baked into image layers**. Runtime configuration reaches the
 container through the environment instead: `skein up` sets `POSTGRES_URI`/`REDIS_URI` in the compose

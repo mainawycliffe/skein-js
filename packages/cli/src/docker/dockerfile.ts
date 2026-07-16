@@ -35,6 +35,9 @@ export function generateDockerignore(): string {
     "node_modules",
     ".env",
     ".env.*",
+    // Never bake a registry credential into a layer — it's supplied via a BuildKit secret at install.
+    ".npmrc",
+    ".npmrc.*",
     "Dockerfile",
     "compose.yaml",
     ".dockerignore",
@@ -60,10 +63,15 @@ export function generateDockerfile(options: DockerfileOptions): string {
     ``,
     // Install prod deps first for layer caching: the artifact's pinned package.json changes rarely,
     // so this layer is reused across rebuilds while only the bundle layer below re-runs. The BuildKit
-    // cache mount keeps the npm cache out of the committed layer.
+    // cache mount keeps the npm cache out of the committed layer. The `npmrc` secret mount lets private
+    // scoped deps authenticate against a private/authenticated registry without baking a token into any
+    // layer; it is optional (BuildKit secrets are not required by default), so a public-registry build
+    // that passes no secret is unaffected. Supply it via `skein build --npmrc <path>` or, for the
+    // standalone Dockerfile, `docker build --secret id=npmrc,src=<path>`.
     `# Install the artifact's pinned production dependencies (exact versions — deterministic).`,
     `COPY package.json ./`,
     `RUN --mount=type=cache,target=/root/.npm \\`,
+    `    --mount=type=secret,id=npmrc,target=/app/.npmrc \\`,
     `    npm install --omit=dev --omit=optional --no-audit --no-fund`,
     ``,
     `# Copy the pre-built artifact (bundled JS graphs, production langgraph.json, baked schemas).`,

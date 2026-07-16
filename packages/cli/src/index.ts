@@ -96,6 +96,10 @@ program
   .option("-c, --config <path>", "Path to langgraph.json", "langgraph.json")
   .option("-p, --port <port>", "Port to expose", parsePort, 8123)
   .option("--host <host>", "Host to bind", "0.0.0.0")
+  .option(
+    "-n, --npmrc <path>",
+    "Path to an .npmrc for authenticating private-registry installs (wired in as a build secret)",
+  )
   .action((options) => runUp(options));
 
 program
@@ -103,6 +107,10 @@ program
   .description("Build a deployable Docker image from the config.")
   .option("-c, --config <path>", "Path to langgraph.json", "langgraph.json")
   .option("-t, --tag <tag>", "Image tag (defaults to the project directory name)")
+  .option(
+    "-n, --npmrc <path>",
+    "Path to an .npmrc for authenticating private-registry installs (passed to docker build as a BuildKit secret)",
+  )
   .action((options) => runBuild(options));
 
 program

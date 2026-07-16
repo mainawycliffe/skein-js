@@ -3,7 +3,7 @@
 // Dockerfile + compose from the templates here, then shell out to the `docker` CLI.
 
 import { spawn, spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -89,6 +89,24 @@ function defaultImageTag(configDir: string): string {
   return trimmed.length > 0 ? trimmed : "skein-app";
 }
 
+/**
+ * Resolve `--npmrc` to the absolute path for a BuildKit secret mount, authenticating the image's
+ * private-registry install. Returns the absolute path when a readable file is given, `undefined` when
+ * the flag is absent (public-registry build — the Dockerfile's secret mount is then inert), and `null`
+ * when the given path does not exist (a clear error is printed and `exitCode` set — the caller aborts
+ * before invoking docker).
+ */
+function resolveNpmrcSecret(npmrc: string | undefined): string | null | undefined {
+  if (npmrc === undefined) return undefined;
+  const resolved = path.resolve(process.cwd(), npmrc);
+  if (!existsSync(resolved)) {
+    console.error(`skein: --npmrc file not found: ${resolved}`);
+    process.exitCode = 1;
+    return null;
+  }
+  return resolved;
+}
+
 /** True when the `docker` CLI is on PATH — a fast preflight so we fail with a clear message. */
 function dockerAvailable(): boolean {
   const probe = spawnSync("docker", ["--version"], { stdio: "ignore" });
@@ -165,11 +183,15 @@ export interface BuildCommandOptions {
   config: string;
   /** Image tag; defaults to the project directory name. */
   tag?: string;
+  /** Path to an `.npmrc`, mounted as a BuildKit secret to authenticate private-registry installs. */
+  npmrc?: string;
 }
 
 /** `skein build` — bundle the project into a self-contained artifact and build the image from it. */
 export async function runBuild(options: BuildCommandOptions): Promise<void> {
   const context = await loadConfigContext(options.config);
+  const npmrcPath = resolveNpmrcSecret(options.npmrc);
+  if (npmrcPath === null) return;
   if (!requireDocker()) return;
 
   let artifactDir: string;
@@ -182,10 +204,11 @@ export async function runBuild(options: BuildCommandOptions): Promise<void> {
   }
 
   const tag = options.tag ?? defaultImageTag(context.configDir);
+  const secretArgs = npmrcPath !== undefined ? ["--secret", `id=npmrc,src=${npmrcPath}`] : [];
   console.log(`skein: building image "${tag}"…`);
   const result = await runToCompletion(
     "docker",
-    ["build", "-t", tag, "-f", path.join(artifactDir, DOCKERFILE_NAME), "."],
+    ["build", "-t", tag, "-f", path.join(artifactDir, DOCKERFILE_NAME), ...secretArgs, "."],
     artifactDir,
   );
   if (!succeeded(result)) {
@@ -200,11 +223,15 @@ export interface UpCommandOptions {
   config: string;
   port: number;
   host: string;
+  /** Path to an `.npmrc`, wired into compose as a build secret for private-registry installs. */
+  npmrc?: string;
 }
 
 /** `skein up` — bundle into an artifact, then bring up app (built from it) + Postgres + Redis. */
 export async function runUp(options: UpCommandOptions): Promise<void> {
   const context = await loadConfigContext(options.config);
+  const npmrcPath = resolveNpmrcSecret(options.npmrc);
+  if (npmrcPath === null) return;
   if (!requireDocker()) return;
 
   let artifactDir: string;
@@ -216,6 +243,7 @@ export async function runUp(options: UpCommandOptions): Promise<void> {
           hostPort: options.port,
           host: options.host,
           containerPort: CONTAINER_PORT,
+          npmrcPath,
         }),
       },
     ]);

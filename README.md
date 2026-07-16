@@ -268,6 +268,10 @@ Useful `skein dev` flags: `-p, --port` (default 2024), `--host`, `--store memory
 `--queue memory|redis`, `--no-persist`, `--no-reload`, `-v, --verbose`. Full mapping and the
 annotated `langgraph.json`: [`docs/langgraph-cli-compat.md`](./docs/langgraph-cli-compat.md).
 
+Private production deps? `skein build`/`up` take `-n, --npmrc <path>`, mounting an `.npmrc` as a
+BuildKit secret so the image can install from a **private/authenticated npm registry** without baking
+a token into any layer.
+
 ## Embedding skein-js in your own server
 
 Prefer to run inside your own Node process? Serve a `langgraph.json` from an Express app — the

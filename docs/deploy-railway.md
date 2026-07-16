@@ -48,6 +48,11 @@ Point a Railway service at your repo. Because the repo has a skein-generated `Do
 directly. BuildKit — Railway's default — honors the image's dependency **cache mount**, so redeploys
 that don't change the lockfile skip reinstalling dependencies.
 
+If your production dependencies include **private scoped packages**, the generated Dockerfile mounts
+an optional `id=npmrc` BuildKit secret on the install step. Provide it as a build secret so the
+install can authenticate without baking a token into any layer — locally via
+`docker build --secret id=npmrc,src=$HOME/.npmrc …`, or through your platform's build-secret support.
+
 ### 4. Wire the env vars
 
 In the app service's **Variables**, add Railway [reference variables](https://docs.railway.com/guides/variables#reference-variables)
