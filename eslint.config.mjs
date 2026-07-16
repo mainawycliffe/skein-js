@@ -16,6 +16,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/.nx/**",
       "**/*.config.*",
+      "packages/cli/src/bundle/__fixtures__/**", // mini-monorepo fixture shaped for the bundler, not our lint rules
     ],
   },
 

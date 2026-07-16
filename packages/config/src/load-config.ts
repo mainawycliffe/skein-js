@@ -61,6 +61,13 @@ export interface LoadConfigOptions {
    * analyses the TypeScript source and never executes the module.
    */
   importModule?: ModuleImporter;
+  /**
+   * Precomputed graph schemas, keyed by graph id — supplied by `skein build`/`skein start` for a
+   * pre-compiled production image. When present, `schemas(id)` returns these instead of statically
+   * analysing TypeScript source: the image ships bundled JS with no `.ts` to introspect, and this
+   * also keeps `getStaticGraphSchema` (and its `worker_threads` parser) out of the runtime entirely.
+   */
+  staticSchemas?: Record<string, GraphSchemas>;
 }
 
 async function readJsonFile(filePath: string): Promise<unknown> {
@@ -81,7 +88,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Skein
   const cwd = options.cwd ?? process.cwd();
   const configPath = path.resolve(cwd, options.configPath ?? "langgraph.json");
   const configDir = path.dirname(configPath);
-  const { importModule } = options;
+  const { importModule, staticSchemas } = options;
 
   const config = parseLanggraphJson(await readJsonFile(configPath));
 
@@ -120,6 +127,15 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Skein
       return memoize(graphCache, graphId, () => loadGraph(spec, importModule));
     },
     async schemas(graphId) {
+      // Production (pre-compiled image): serve schemas baked at build time, so the runtime never
+      // parses TypeScript (there is none) or spawns the schema worker. `specFor` still validates the
+      // id so an unknown graph rejects consistently with the dynamic path.
+      if (staticSchemas) {
+        specFor(graphId);
+        const baked = staticSchemas[graphId];
+        if (!baked) throw new SkeinConfigError(`No precomputed schema for graph "${graphId}".`);
+        return baked;
+      }
       const spec = specFor(graphId);
       // Static analysis of the TypeScript source — no module execution — so this works the same
       // whether graphs load natively or through a custom `importModule` (vite `skein dev`).

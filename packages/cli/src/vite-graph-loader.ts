@@ -7,13 +7,12 @@
 import { createServer as createNetServer } from "node:net";
 
 import type { ModuleImporter } from "@skein-js/config";
-import {
-  createServer,
-  createServerModuleRunner,
-  searchForWorkspaceRoot,
-  type ViteDevServer,
-} from "vite";
+import type { ViteDevServer } from "vite";
 import type { ModuleRunner } from "vite/module-runner";
+
+// vite is an optionalDependency and only used on the host (`skein dev`/`skein build`), never in the
+// production image. Import it lazily so the CLI module graph loads without vite present — `skein
+// start` in the slim image pulls in this file transitively but never calls into it.
 
 /** Ask the OS for an unused TCP port. */
 function findFreePort(): Promise<number> {
@@ -54,6 +53,8 @@ export async function createViteGraphLoader(
   root: string,
   ignored: string[] = [],
 ): Promise<ViteGraphLoader> {
+  const { createServer, createServerModuleRunner, searchForWorkspaceRoot } = await import("vite");
+
   // Aliased lib sources live at the monorepo root, not the app-level `root` (the `langgraph.json`
   // dir). Reuse vite's own workspace-root detection (pnpm-workspace.yaml / lerna.json / a
   // `workspaces` package.json) so the file-serving allowlist matches what vite would pick by default.

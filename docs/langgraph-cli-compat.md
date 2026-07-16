@@ -25,6 +25,11 @@ two things: read the same `langgraph.json`, and mirror the same command surface.
 
 Shared flags where sensible: `--port`, `--host`, `--no-reload`, `--config`.
 
+**skein-only:** `skein start` serves a pre-built `.skein/build` artifact (the production image's
+entrypoint) — plain compiled JS, no vite, no reload. You rarely run it by hand; `skein build`/`up`
+produce the artifact and the generated Dockerfile invokes it. The LangGraph CLI has no equivalent
+(it transforms TypeScript at runtime inside the image).
+
 **skein-only dev flags** (beyond the LangGraph CLI) — run `skein dev` against production-shaped
 storage without Docker:
 
@@ -63,16 +68,17 @@ multi-framework, drop-in-CLI layer that isn't open — so your project moves ove
 
 **What we implement, and the tools we use:**
 
-| Concern                  | skein-js implementation                                                                                                                                                                                                             |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CLI                      | [commander](https://github.com/tj/commander.js) — the `skein dev`/`up`/`build`/`dockerfile` command surface.                                                                                                                        |
-| Dev graph loading        | [vite](https://vitejs.dev) loads your TypeScript graphs **in-process** — no separate build step. tsconfig `paths` aliases resolve, so graphs in an Nx/Turborepo/pnpm-workspace monorepo import shared workspace packages unchanged. |
-| Dev hot reload           | **State-preserving** reload on source change: your threads, runs, and memory survive the reload.                                                                                                                                    |
-| Dev persistence          | Dev state is snapshotted to `.skein/` so it survives restarts (opt out with `--no-persist`).                                                                                                                                        |
-| Run queue (prod)         | [BullMQ](https://docs.bullmq.io) on Redis — background runs, retries, backoff, and crash recovery.                                                                                                                                  |
-| Cross-instance streaming | [ioredis](https://github.com/redis/ioredis) + **Redis Streams**/pub-sub — join a run's SSE stream from any instance.                                                                                                                |
-| Postgres store (prod)    | [pg](https://node-postgres.com) + [node-pg-migrate](https://github.com/salsita/node-pg-migrate) migrations + **pgvector** semantic search.                                                                                          |
-| Checkpoints (prod)       | LangGraph-native [`PostgresSaver`](https://www.npmjs.com/package/@langchain/langgraph-checkpoint-postgres) — reused, not reinvented.                                                                                                |
+| Concern                  | skein-js implementation                                                                                                                                                                                                                                                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI                      | [commander](https://github.com/tj/commander.js) — the `skein dev`/`up`/`build`/`dockerfile` command surface, plus `skein start` (below).                                                                                                                                                                                                        |
+| Dev graph loading        | [vite](https://vitejs.dev) loads your TypeScript graphs **in-process** — no separate build step. tsconfig `paths` aliases resolve, so graphs in an Nx/Turborepo/pnpm-workspace monorepo import shared workspace packages unchanged.                                                                                                             |
+| Prod image build         | `skein build`/`up` bundle graphs (+ auth/embed) to plain JS with `vite.build()` at build time — same alias resolution as dev, anchored at the workspace root — into a self-contained `.skein/build` artifact. The slim image installs prod deps only and runs the compiled output via `skein start` (no vite, no runtime TypeScript transform). |
+| Dev hot reload           | **State-preserving** reload on source change: your threads, runs, and memory survive the reload.                                                                                                                                                                                                                                                |
+| Dev persistence          | Dev state is snapshotted to `.skein/` so it survives restarts (opt out with `--no-persist`).                                                                                                                                                                                                                                                    |
+| Run queue (prod)         | [BullMQ](https://docs.bullmq.io) on Redis — background runs, retries, backoff, and crash recovery.                                                                                                                                                                                                                                              |
+| Cross-instance streaming | [ioredis](https://github.com/redis/ioredis) + **Redis Streams**/pub-sub — join a run's SSE stream from any instance.                                                                                                                                                                                                                            |
+| Postgres store (prod)    | [pg](https://node-postgres.com) + [node-pg-migrate](https://github.com/salsita/node-pg-migrate) migrations + **pgvector** semantic search.                                                                                                                                                                                                      |
+| Checkpoints (prod)       | LangGraph-native [`PostgresSaver`](https://www.npmjs.com/package/@langchain/langgraph-checkpoint-postgres) — reused, not reinvented.                                                                                                                                                                                                            |
 
 **Transparent improvements over `langgraph dev`.** Because the storage/queue are pluggable drivers,
 `skein dev` can run against **production-shaped** Postgres/Redis **without Docker** (`--store

@@ -1,57 +1,16 @@
-// Generate a standalone Dockerfile from a `langgraph.json`. The image installs the project's deps
-// and runs the skein server against Postgres + Redis. It reuses the in-process dev boot path with
-// reload/persistence off — the same engine, durable drivers — which is the pragmatic MVP; a
-// pre-compiled build is a later optimization (see docs/roadmap.md step 10).
-
-import { existsSync } from "node:fs";
-import path from "node:path";
+// Generate the Dockerfile for the pre-built production image. `skein build`/`up` bundle the project's
+// TypeScript graphs (+ auth/embed) into a self-contained `.skein/build` artifact of plain JS on the
+// host (see ../bundle/bundle-project.ts); this Dockerfile is generated INTO that artifact dir, and the
+// image simply installs the artifact's pinned production dependencies and runs `skein start` over the
+// compiled output. No vite/tsx, no devDependencies, no runtime TypeScript transform — the image
+// carries only what it runs. The artifact ships its own `package.json`, so package-manager detection
+// and the user's lockfile are irrelevant here; a single `npm install --omit=dev` is deterministic
+// because every dependency is exact-pinned.
 
 /** Node major version → base image tag; falls back to 20 (the examples' pin). */
 function baseImage(nodeVersion: string | undefined): string {
   const major = nodeVersion?.trim().match(/^\d+/)?.[0] ?? "20";
   return `node:${major}-slim`;
-}
-
-export type PackageManager = "pnpm" | "yarn" | "npm";
-
-/** Detect the project's package manager from its lockfile; defaults to npm. */
-export function detectPackageManager(projectDir: string): PackageManager {
-  if (existsSync(path.join(projectDir, "pnpm-lock.yaml"))) return "pnpm";
-  if (existsSync(path.join(projectDir, "yarn.lock"))) return "yarn";
-  return "npm";
-}
-
-/**
- * Lockfile glob + install command for each package manager. Installs run with a BuildKit cache
- * mount over the manager's package store, so a rebuild that hasn't changed the lockfile reuses the
- * cache and is near-instant (BuildKit is the default for `docker build` / `docker compose` on
- * current Docker). Installs deliberately keep devDependencies — the container runs `skein dev`,
- * which needs the vite/tsx toolchain to load the TypeScript graphs; `NODE_ENV=production` is set
- * only afterwards (runtime), never before install, or graph loading would break.
- */
-function installSteps(manager: PackageManager): { copyLock: string; install: string } {
-  switch (manager) {
-    case "pnpm":
-      return {
-        copyLock: "COPY package.json pnpm-lock.yaml* ./",
-        install:
-          "RUN --mount=type=cache,target=/root/.local/share/pnpm/store " +
-          "corepack enable && pnpm install --frozen-lockfile",
-      };
-    case "yarn":
-      return {
-        copyLock: "COPY package.json yarn.lock* ./",
-        install:
-          "RUN --mount=type=cache,target=/usr/local/share/.cache/yarn " +
-          "corepack enable && yarn install --frozen-lockfile",
-      };
-    case "npm":
-      return {
-        copyLock: "COPY package.json package-lock.json* ./",
-        // `npm ci` needs a lockfile; fall back to `npm install` when there isn't one.
-        install: "RUN --mount=type=cache,target=/root/.npm npm ci || npm install",
-      };
-  }
 }
 
 export interface DockerfileOptions {
@@ -61,15 +20,13 @@ export interface DockerfileOptions {
   dockerfileLines?: readonly string[];
   /** Port the server binds inside the container. */
   port: number;
-  /** Package manager to install with. */
-  packageManager: PackageManager;
 }
 
 /**
- * Render a `.dockerignore` so `COPY . .` never bakes secrets or bulk into the image. Excludes
- * `.env*` (runtime secrets belong in the environment / compose, not an image layer), `.git`,
- * `node_modules` (reinstalled by the install step), `.skein` dev state, and the generated Docker
- * assets themselves.
+ * Render a `.dockerignore` for the artifact build context. The artifact is self-contained (bundled
+ * JS + a pinned `package.json` + the production `langgraph.json`/`schemas.json`), so this mainly keeps
+ * the generated Docker assets and any locally-installed `node_modules` out of the image — deps are
+ * (re)installed by the build's install step.
  */
 export function generateDockerignore(): string {
   return [
@@ -78,7 +35,6 @@ export function generateDockerignore(): string {
     "node_modules",
     ".env",
     ".env.*",
-    ".skein",
     "Dockerfile",
     "compose.yaml",
     ".dockerignore",
@@ -87,43 +43,47 @@ export function generateDockerignore(): string {
   ].join("\n");
 }
 
-/** Render the Dockerfile text for `skein build` / `skein dockerfile`. */
+/** Render the Dockerfile text for `skein build` / `skein dockerfile`, run against the build artifact. */
 export function generateDockerfile(options: DockerfileOptions): string {
-  const { nodeVersion, dockerfileLines = [], port, packageManager } = options;
-  const { copyLock, install } = installSteps(packageManager);
+  const { nodeVersion, dockerfileLines = [], port } = options;
 
   const lines = [
-    // The syntax directive must be the first line to be honored — it enables the RUN cache mounts.
+    // The syntax directive must be the first line to be honored — it enables the RUN cache mount.
     `# syntax=docker/dockerfile:1`,
     `# Generated by skein — do not edit by hand (regenerated by \`skein build\` / \`skein up\`).`,
+    // The build context must be a skein artifact dir (bundled JS + pinned package.json + schemas.json),
+    // which `skein build`/`up` create under `.skein/build`. Building this Dockerfile against a raw
+    // project dir will fail — run `skein build` instead of `docker build` by hand.
+    `# Build context: a \`.skein/build\` artifact produced by \`skein build\` (not the project root).`,
     `FROM ${baseImage(nodeVersion)}`,
-    // Hand /app to the unprivileged 'node' user (uid 1000, shipped by the base image) so the server
-    // never runs as root. corepack/npm need root to install, so install as root, then chown the
-    // whole tree — including the root-created node_modules, where vite writes its cache at runtime.
     `WORKDIR /app`,
     ``,
-    `# Install dependencies first for better layer caching (BuildKit cache mount speeds rebuilds).`,
-    copyLock,
-    install,
+    // Install prod deps first for layer caching: the artifact's pinned package.json changes rarely,
+    // so this layer is reused across rebuilds while only the bundle layer below re-runs. The BuildKit
+    // cache mount keeps the npm cache out of the committed layer.
+    `# Install the artifact's pinned production dependencies (exact versions — deterministic).`,
+    `COPY package.json ./`,
+    `RUN --mount=type=cache,target=/root/.npm \\`,
+    `    npm install --omit=dev --omit=optional --no-audit --no-fund`,
     ``,
-    `# Copy the rest of the project (graphs, langgraph.json, source).`,
+    `# Copy the pre-built artifact (bundled JS graphs, production langgraph.json, baked schemas).`,
     `COPY . .`,
     ``,
-    `# Give the runtime user ownership of the app + installed node_modules so vite can write its`,
-    `# on-disk cache under node_modules/.vite without EACCES.`,
-    `RUN chown -R node:node /app`,
-    ``,
-    // Set NODE_ENV only after install so devDependencies (the vite/tsx toolchain `skein dev` loads
-    // graphs with) are installed; setting it before install would prune them and break graph loading.
     `ENV NODE_ENV=production`,
+    // The bundle ships sourcemaps; enable them so stack traces map back to the original TypeScript.
+    `ENV NODE_OPTIONS=--enable-source-maps`,
     `EXPOSE ${port}`,
+    // Liveness probe against skein's `/ok` endpoint, targeting the same port the server binds.
+    `HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \\`,
+    `    CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||${port})+'/ok').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"`,
+    // Run unprivileged. The bundle writes nothing to disk, and /app is world-readable, so no chown.
     `USER node`,
     ...dockerfileLines,
     ``,
-    `# Serve the Agent Protocol against Postgres + Redis (POSTGRES_URI / REDIS_URI from the environment).`,
+    `# Serve the compiled artifact against Postgres + Redis (POSTGRES_URI / REDIS_URI from the env).`,
     `# No --port: the server binds $PORT when the platform injects one (Railway/Fly/Render), else its`,
     `# default. Exec form keeps node as PID 1 so SIGTERM reaches skein's graceful-shutdown handler.`,
-    `CMD ["npx", "skein", "dev", "--no-reload", "--no-persist", "--store", "postgres", "--queue", "redis", "--host", "0.0.0.0"]`,
+    `CMD ["npx", "skein", "start", "--store", "postgres", "--queue", "redis", "--host", "0.0.0.0"]`,
   ];
   return `${lines.join("\n")}\n`;
 }

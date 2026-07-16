@@ -26,6 +26,7 @@ import { printBanner } from "./banner.js";
 import { createDevLogger } from "./dev-logger.js";
 import { devStateFile, writeDevStateFile, LANGGRAPH_DIR, STATE_DIR } from "./dev-state.js";
 import { applyProjectEnv } from "./project-env.js";
+import { describeBindError, envHost, envPort } from "./serve-env.js";
 import { createViteGraphLoader } from "./vite-graph-loader.js";
 
 /** The flags `skein dev` accepts, after commander parsing. */
@@ -59,24 +60,6 @@ const FORCE_EXIT_MS = 5000;
 /** Console logger for the dev server — colored, `info:`-prefixed output that drives per-request
  * logging, the background-run summaries, the startup banner, and surfaces engine warnings. */
 const devLogger = createDevLogger();
-
-/**
- * Port to bind, honoring a `PORT` env var (Railway/Fly/Render/Heroku inject one). Resolved here,
- * after the project's `.env` is merged, so a project-declared PORT is honored too — not just an
- * ambient one. Returns `fallback` when PORT is unset or not a valid port.
- */
-function envPort(fallback: number): number {
-  const raw = process.env.PORT;
-  if (raw === undefined || raw.trim() === "") return fallback;
-  const port = Number(raw);
-  return Number.isInteger(port) && port >= 0 && port <= 65535 ? port : fallback;
-}
-
-/** Host to bind, honoring a `HOST` env var when set; otherwise `fallback`. */
-function envHost(fallback: string): string {
-  const host = process.env.HOST;
-  return host !== undefined && host.trim() !== "" ? host : fallback;
-}
 
 export async function runDev(options: DevCommandOptions): Promise<void> {
   const configPath = path.resolve(process.cwd(), options.config);
@@ -155,12 +138,7 @@ export async function runDev(options: DevCommandOptions): Promise<void> {
     // `skeinRouter` starts the run worker before `listen`; without these closes a bind failure
     // leaves the worker holding the event loop open and the process hangs instead of exiting.
     await Promise.allSettled([loader.close(), runtime.dispose()]);
-    const code = (error as NodeJS.ErrnoException).code;
-    console.error(
-      code === "EADDRINUSE"
-        ? `skein: port ${port} is already in use. Stop the other process or pass --port.`
-        : `skein: failed to start dev server: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    console.error(`skein: ${describeBindError(error, port)}`);
     process.exitCode = 1;
     return;
   }

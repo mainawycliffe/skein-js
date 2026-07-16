@@ -4,60 +4,63 @@ import { generateCompose } from "./compose.js";
 import { generateDockerfile } from "./dockerfile.js";
 
 describe("generateDockerfile", () => {
-  it("pins the base image to the config's node_version and appends dockerfile_lines", () => {
+  it("pins the base image to the config's node_version and appends dockerfile_lines before CMD", () => {
     const out = generateDockerfile({
       nodeVersion: "22",
       dockerfileLines: ["RUN echo hello", "ENV FOO=bar"],
       port: 8123,
-      packageManager: "npm",
     });
     expect(out).toContain("FROM node:22-slim");
     expect(out).toContain("RUN echo hello");
     expect(out).toContain("ENV FOO=bar");
-    // The extra lines land before the CMD, not after it.
-    expect(out.indexOf("RUN echo hello")).toBeLessThan(out.indexOf("CMD"));
+    expect(out.indexOf("RUN echo hello")).toBeLessThan(out.indexOf("CMD ["));
   });
 
-  it("defaults to node 20 and boots against postgres + redis with reload off", () => {
-    const out = generateDockerfile({ port: 8123, packageManager: "npm" });
+  it("defaults to node 20 and boots the compiled artifact via `skein start`", () => {
+    const out = generateDockerfile({ port: 8123 });
     expect(out).toContain("FROM node:20-slim");
+    // Pre-built path: runs `skein start` (compiled JS), not `skein dev` (runtime TS transform).
+    expect(out).toContain('"npx", "skein", "start"');
+    expect(out).not.toContain('"dev"');
     expect(out).toContain('"--store", "postgres"');
     expect(out).toContain('"--queue", "redis"');
-    expect(out).toContain('"--no-reload"');
     expect(out).toContain("EXPOSE 8123");
   });
 
-  it("uses the matching install command per package manager", () => {
-    expect(generateDockerfile({ port: 8123, packageManager: "pnpm" })).toContain(
-      "pnpm install --frozen-lockfile",
-    );
-    expect(generateDockerfile({ port: 8123, packageManager: "yarn" })).toContain(
-      "yarn install --frozen-lockfile",
-    );
-    expect(generateDockerfile({ port: 8123, packageManager: "npm" })).toContain("npm ci");
+  it("ships a slim image: prod-only install, no vite/tsx toolchain, no chown", () => {
+    const out = generateDockerfile({ port: 8123 });
+    expect(out).toContain("npm install --omit=dev --omit=optional --no-audit --no-fund");
+    // No dev toolchain, no runtime TS transform, no vite cache to chown.
+    expect(out).not.toContain("chown");
+    expect(out).not.toMatch(/vite|tsx|corepack|--frozen-lockfile/);
   });
 
-  it("runs as the non-root node user, owning node_modules so vite's cache is writable", () => {
-    const out = generateDockerfile({ port: 8123, packageManager: "pnpm" });
+  it("runs as the non-root node user before the CMD", () => {
+    const out = generateDockerfile({ port: 8123 });
     expect(out).toContain("USER node");
-    // Deps install as root (corepack needs it), then the whole tree is handed to `node` so the
-    // runtime user can write node_modules/.vite. The chown must precede USER node and the CMD.
-    expect(out).toContain("RUN chown -R node:node /app");
-    expect(out.indexOf("RUN chown -R node:node /app")).toBeLessThan(out.indexOf("USER node"));
-    expect(out.indexOf("USER node")).toBeLessThan(out.indexOf("CMD"));
+    expect(out.indexOf("USER node")).toBeLessThan(out.indexOf("CMD ["));
   });
 
-  it("enables the BuildKit cache mount for faster dependency rebuilds", () => {
-    expect(generateDockerfile({ port: 8123, packageManager: "pnpm" })).toMatch(
-      /^# syntax=docker\/dockerfile:1/,
-    );
-    expect(generateDockerfile({ port: 8123, packageManager: "pnpm" })).toContain(
-      "--mount=type=cache",
-    );
+  it("sets production env and enables source maps for readable stack traces", () => {
+    const out = generateDockerfile({ port: 8123 });
+    expect(out).toContain("ENV NODE_ENV=production");
+    expect(out).toContain("ENV NODE_OPTIONS=--enable-source-maps");
+  });
+
+  it("declares a healthcheck against /ok on the bound port", () => {
+    const out = generateDockerfile({ port: 8123 });
+    expect(out).toContain("HEALTHCHECK");
+    expect(out).toContain("/ok");
+  });
+
+  it("enables the BuildKit cache mount and the syntax directive on line 1", () => {
+    const out = generateDockerfile({ port: 8123 });
+    expect(out).toMatch(/^# syntax=docker\/dockerfile:1/);
+    expect(out).toContain("--mount=type=cache");
   });
 
   it("omits --port so the container binds the platform-injected PORT", () => {
-    const out = generateDockerfile({ port: 8123, packageManager: "npm" });
+    const out = generateDockerfile({ port: 8123 });
     // Exec-form CMD keeps node as PID 1 for graceful SIGTERM; --host stays, --port is dropped.
     expect(out).toContain('"--host", "0.0.0.0"');
     expect(out).not.toContain('"--port"');

@@ -16,6 +16,7 @@ import {
   type GraphRegistry,
   type ModuleImporter,
 } from "@skein-js/config";
+import type { GraphSchemas as ConfigGraphSchemas } from "@skein-js/config";
 import {
   corsFromHttpConfig,
   loadReloadableInMemoryRuntime,
@@ -43,6 +44,11 @@ export interface BuildRuntimeOptions {
   configPath: string;
   /** TS-capable importer (e.g. the CLI's vite loader). Omitted for plain JS/Node resolution. */
   importModule?: ModuleImporter;
+  /**
+   * Precomputed graph schemas (from `skein build`) for a pre-compiled image — forwarded to
+   * `loadConfig` so schema introspection is a map lookup, never a TypeScript parse. Omitted for dev.
+   */
+  schemas?: Record<string, ConfigGraphSchemas>;
   /** `"memory"` (default dev) or `"postgres"` (reads `POSTGRES_URI`). */
   store: StoreDriver;
   /** `"memory"` (default dev) or `"redis"` (reads `REDIS_URI`). */
@@ -138,11 +144,11 @@ async function resolveStoreIndex(
 
 /** Assemble a {@link SkeinRuntime} for the requested driver combination. */
 export async function buildRuntime(options: BuildRuntimeOptions): Promise<SkeinRuntime> {
-  const { configPath, importModule, store, queue } = options;
+  const { configPath, importModule, store, queue, schemas } = options;
 
   // All-memory: reuse the express reloadable in-memory runtime verbatim (hot-reload + snapshot).
   if (store === "memory" && queue === "memory") {
-    const runtime = await loadReloadableInMemoryRuntime(configPath, importModule);
+    const runtime = await loadReloadableInMemoryRuntime(configPath, importModule, schemas);
     return {
       deps: runtime.deps,
       cors: runtime.cors,
@@ -153,7 +159,7 @@ export async function buildRuntime(options: BuildRuntimeOptions): Promise<SkeinR
     };
   }
 
-  const first = await loadConfig({ configPath, importModule });
+  const first = await loadConfig({ configPath, importModule, staticSchemas: schemas });
   const { resolver, reroute } = reroutableGraphResolver(first.graphs);
   // Track every concrete resource as it is created, so a failure part-way through assembly (a bad
   // migration, a missing REDIS_URI after Postgres already connected) tears down what exists rather
@@ -239,7 +245,7 @@ export async function buildRuntime(options: BuildRuntimeOptions): Promise<SkeinR
       deps,
       cors: corsFromHttpConfig(first.config.http),
       reloadGraphs: async () => {
-        reroute((await loadConfig({ configPath, importModule })).graphs);
+        reroute((await loadConfig({ configPath, importModule, staticSchemas: schemas })).graphs);
       },
       dispose: disposeAll,
     };

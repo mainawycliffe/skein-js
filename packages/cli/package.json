@@ -50,7 +50,9 @@
     "@skein-js/config": "workspace:*",
     "@skein-js/express": "workspace:*",
     "@skein-js/runtime": "workspace:*",
-    "commander": "~13.1.0",
+    "commander": "~13.1.0"
+  },
+  "optionalDependencies": {
     "vite": "^8.1.0"
   },
   "peerDependencies": {

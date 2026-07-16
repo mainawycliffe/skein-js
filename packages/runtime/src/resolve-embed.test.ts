@@ -4,11 +4,26 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { RuntimeConfigError } from "./errors.js";
-import { resolveEmbed } from "./resolve-embed.js";
+import { embedRuntimePackage, resolveEmbed } from "./resolve-embed.js";
 
 const configDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "__fixtures__");
 // Let vitest transform the .ts fixture rather than the default native importer.
 const importModule = (file: string) => import(/* @vite-ignore */ file);
+
+describe("embedRuntimePackage", () => {
+  it("maps a provider:model embed to the npm package `skein build` must pin into the image", () => {
+    expect(embedRuntimePackage("openai:text-embedding-3-small")).toBe("@langchain/openai");
+    expect(embedRuntimePackage("cohere:embed-english-v3.0")).toBe("@langchain/cohere");
+    expect(embedRuntimePackage("google_genai:text-embedding-004")).toBe("@langchain/google-genai");
+  });
+
+  it("returns undefined for custom-function paths (bundled) and unknown providers", () => {
+    expect(embedRuntimePackage("./embed.ts:embed")).toBeUndefined();
+    expect(embedRuntimePackage("/abs/embed.ts:embed")).toBeUndefined();
+    expect(embedRuntimePackage("acme:some-model")).toBeUndefined();
+    expect(embedRuntimePackage("no-colon")).toBeUndefined();
+  });
+});
 
 describe("resolveEmbed — custom-function path", () => {
   it("adapts a raw (texts) => number[][] export", async () => {

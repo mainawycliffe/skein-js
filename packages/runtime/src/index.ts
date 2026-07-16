@@ -10,4 +10,9 @@ export type {
   StoreDriver,
 } from "./build-runtime.js";
 export { RuntimeConfigError } from "./errors.js";
-export { resolveEmbed, type ResolveEmbedOptions } from "./resolve-embed.js";
+export {
+  resolveEmbed,
+  isCustomFunctionPath,
+  embedRuntimePackage,
+  type ResolveEmbedOptions,
+} from "./resolve-embed.js";

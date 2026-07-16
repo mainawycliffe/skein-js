@@ -58,6 +58,16 @@ Steps 1–10 below are complete: the dev loop **and** self-hosted production bot
     `skein dev` and the Docker image boot the same engine. `skein dockerfile`/`build` generate a
     Dockerfile from `langgraph.json`; `skein up` brings up app + `pgvector/pgvector` Postgres + Redis
     via Docker Compose.
+    - **Pre-built production image (issue #2).** `skein build`/`up` no longer ship a `skein dev`-shaped
+      image. They bundle graphs (+ auth/embed) to plain JS on the host with `vite.build()` — the same
+      tsconfig-`paths`/workspace-alias resolution as `skein dev`, anchored at the workspace root — into
+      a self-contained `.skein/build` artifact (bundled JS + a production `langgraph.json` + a
+      precomputed `schemas.json` + a pinned `package.json`). The slim image installs prod deps only and
+      runs the artifact via a new **`skein start`** command (native `import()`, no vite, no reload). This
+      fixes monorepo builds (aliased `libs/**` are inlined at build time, sidestepping the docker
+      build-context gap), cuts cold-start (no runtime TS transform, graphs warmed at boot), and shrinks
+      the image (no dev toolchain). `vite` is now an `optionalDependency`, lazy-imported for `dev`/`build`
+      only — it never loads in the image.
     - **`skein dev` now optionally uses the production drivers** via `--store postgres` / `--queue redis`
       (connection URLs from `POSTGRES_URI` / `REDIS_URI`), instead of always the in-memory drivers.
       This is a capability `langgraph dev` does **not** offer — it lets you develop and test against

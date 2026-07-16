@@ -12,6 +12,7 @@ import { Command, InvalidArgumentError } from "@commander-js/extra-typings";
 import { runDev } from "./dev-command.js";
 import { runBuild, runDockerfile, runUp } from "./docker/commands.js";
 import { runImportLanggraph } from "./import-command.js";
+import { runStart } from "./start-command.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
@@ -64,6 +65,25 @@ program
   // when the user left them at their defaults (an explicit flag always wins over the env).
   .action((options, command) =>
     runDev({
+      ...options,
+      portExplicit: command.getOptionValueSource("port") === "cli",
+      hostExplicit: command.getOptionValueSource("host") === "cli",
+    }),
+  );
+
+program
+  .command("start")
+  .description("Serve a pre-built .skein/build artifact (the production image entrypoint).")
+  .option("-c, --config <path>", "Path to the artifact's langgraph.json", "langgraph.json")
+  // No --port default of 2024 here: like `skein dev`, an unset flag falls back to a PORT env var
+  // (Railway/Fly/Render inject one), resolved after the config's inline env is merged.
+  .option("-p, --port <port>", "Port to bind", parsePort, 2024)
+  .option("--host <host>", "Host to bind", "127.0.0.1")
+  .option("--store <driver>", "Store driver: memory | postgres", parseStore, "memory")
+  .option("--queue <driver>", "Queue driver: memory | redis", parseQueue, "memory")
+  .option("-v, --verbose", "Log per-run activity: start/finish, tool calls, and interrupts")
+  .action((options, command) =>
+    runStart({
       ...options,
       portExplicit: command.getOptionValueSource("port") === "cli",
       hostExplicit: command.getOptionValueSource("host") === "cli",

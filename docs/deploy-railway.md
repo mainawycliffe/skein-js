@@ -6,9 +6,12 @@ _does_ ship is a PaaS-friendly Docker image (`skein build` / `skein dockerfile`)
 Postgres and a Redis, set two env vars." This guide walks the Railway path; nothing here is
 Railway-specific beyond the dashboard steps.
 
-> The generated image runs the same engine as `skein dev`, with reload/persistence off and durable
-> drivers on (`--store postgres --queue redis`). See [runs-and-redis.md](./runs-and-redis.md) for the
-> production topology it mirrors.
+> The image is **pre-built**: `skein build` bundles your TypeScript graphs (+ auth/embed) to plain JS
+> on the host — resolving tsconfig `paths`/workspace aliases once, anchored at the workspace root — and
+> the image runs that compiled output via `skein start` against the durable drivers
+> (`--store postgres --queue redis`). No vite/tsx toolchain, no runtime TypeScript transform, no
+> devDependencies: only the pinned production deps are installed. See
+> [runs-and-redis.md](./runs-and-redis.md) for the production topology it mirrors.
 
 ## What the image already does for you
 

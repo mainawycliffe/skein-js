@@ -66,6 +66,27 @@ describe("loadConfig", () => {
     expect(schemas["graph"]).toHaveProperty("state");
   }, 30_000);
 
+  it("serves precomputed schemas without parsing TypeScript when staticSchemas is set", async () => {
+    // The production image (`skein build`/`start`) ships bundled JS with no `.ts` to introspect, so
+    // schemas are baked at build time and served from a map. Point the source at a non-existent file
+    // to prove `getStaticGraphSchema` is never called (it would throw trying to read it).
+    const baked = { graph: { graph_id: "echo", state: {} } };
+    const { graphs } = await loadConfig({
+      cwd: exampleDir,
+      staticSchemas: { echo: baked as never },
+    });
+
+    await expect(graphs.schemas("echo")).resolves.toBe(baked);
+  });
+
+  it("throws when a graph has no precomputed schema in staticSchemas", async () => {
+    const { graphs } = await loadConfig({ cwd: exampleDir, staticSchemas: {} });
+    // Known id, but no baked schema for it — a build/manifest mismatch, surfaced as a config error.
+    await expect(graphs.schemas("echo")).rejects.toBeInstanceOf(SkeinConfigError);
+    // Unknown id still rejects via the same spec validation as the dynamic path.
+    await expect(graphs.schemas("nope")).rejects.toBeInstanceOf(SkeinConfigError);
+  });
+
   it("caches the compiled graph across loads", async () => {
     const { graphs } = await loadConfig({ cwd: exampleDir });
     const [a, b] = await Promise.all([graphs.load("echo"), graphs.load("echo")]);

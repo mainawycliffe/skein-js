@@ -65,10 +65,28 @@ function toEmbedFunction(value: unknown, source: string): EmbedFunction {
   );
 }
 
-/** A custom-function path looks like a path (starts with `.`/`/`) or names a source file. */
-function isCustomFunctionPath(embed: string): boolean {
+/**
+ * Whether a `store.index.embed` value is a custom-function path (`"./embed.ts:fn"`) rather than a
+ * `"provider:model"` string — it looks like a path (starts with `.`/`/`) or names a source file.
+ * Exported so `skein build` knows which embed forms to bundle (paths) vs leave as provider strings.
+ */
+export function isCustomFunctionPath(embed: string): boolean {
   const head = embed.split(":", 1)[0] ?? "";
   return head.startsWith(".") || head.startsWith("/") || /\.([mc]?[jt]s|py)$/.test(head);
+}
+
+/**
+ * The npm package a `store.index.embed` value needs **installed at runtime**, or undefined. A
+ * `provider:model` embed dynamically imports `@langchain/<provider>` (see {@link resolveProviderEmbed}),
+ * but that package is never imported by graph code, so `skein build` won't discover it while bundling —
+ * it must pin this package into the production image explicitly. Custom-function paths return undefined
+ * (they are bundled), as do unknown providers.
+ */
+export function embedRuntimePackage(embed: string): string | undefined {
+  if (isCustomFunctionPath(embed)) return undefined;
+  const separator = embed.indexOf(":");
+  if (separator === -1) return undefined;
+  return PROVIDERS[embed.slice(0, separator)]?.package;
 }
 
 /** Resolve form (1): load `sourceFile`'s `exportSymbol` and adapt it to an `EmbedFunction`. */

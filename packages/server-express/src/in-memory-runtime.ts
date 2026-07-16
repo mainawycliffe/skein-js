@@ -5,7 +5,13 @@
 
 import { MemorySaver } from "@langchain/langgraph";
 import type { GraphResolver, GraphSchemas, ProtocolDeps } from "@skein-js/agent-protocol";
-import { loadAuthEngine, loadConfig, type GraphRegistry, type ModuleImporter } from "@skein-js/config";
+import {
+  loadAuthEngine,
+  loadConfig,
+  type GraphRegistry,
+  type GraphSchemas as ConfigGraphSchemas,
+  type ModuleImporter,
+} from "@skein-js/config";
 import { MemoryRunEventBus, MemoryRunQueue, MemorySkeinStore } from "@skein-js/storage-memory";
 import type { CorsOptions } from "cors";
 
@@ -54,8 +60,13 @@ export interface InMemoryRuntimeConfig {
 export async function loadInMemoryRuntime(
   configPath: string,
   importModule?: ModuleImporter,
+  staticSchemas?: Record<string, ConfigGraphSchemas>,
 ): Promise<InMemoryRuntimeConfig> {
-  const { graphs, config, configDir } = await loadConfig({ configPath, importModule });
+  const { graphs, config, configDir } = await loadConfig({
+    configPath,
+    importModule,
+    staticSchemas,
+  });
   const deps = buildInMemoryDeps(toGraphResolver(graphs));
   deps.auth = await loadAuthEngine(config.auth, { configDir, importModule });
   return {
@@ -87,8 +98,9 @@ export interface ReloadableInMemoryRuntime extends InMemoryRuntimeConfig {
 export async function loadReloadableInMemoryRuntime(
   configPath: string,
   importModule?: ModuleImporter,
+  staticSchemas?: Record<string, ConfigGraphSchemas>,
 ): Promise<ReloadableInMemoryRuntime> {
-  const first = await loadConfig({ configPath, importModule });
+  const first = await loadConfig({ configPath, importModule, staticSchemas });
   let current: GraphRegistry = first.graphs;
 
   // The resolver delegates to `current` on every call, so swapping it below reroutes future loads.
@@ -114,7 +126,7 @@ export async function loadReloadableInMemoryRuntime(
     deps,
     cors: corsFromHttpConfig(first.config.http),
     reloadGraphs: async () => {
-      current = (await loadConfig({ configPath, importModule })).graphs;
+      current = (await loadConfig({ configPath, importModule, staticSchemas })).graphs;
     },
     snapshotState: () => ({
       version: 1,
