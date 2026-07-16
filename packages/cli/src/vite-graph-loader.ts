@@ -7,7 +7,12 @@
 import { createServer as createNetServer } from "node:net";
 
 import type { ModuleImporter } from "@skein-js/config";
-import { createServer, createServerModuleRunner, type ViteDevServer } from "vite";
+import {
+  createServer,
+  createServerModuleRunner,
+  searchForWorkspaceRoot,
+  type ViteDevServer,
+} from "vite";
 import type { ModuleRunner } from "vite/module-runner";
 
 /** Ask the OS for an unused TCP port. */
@@ -37,17 +42,29 @@ export interface ViteGraphLoader {
 /**
  * Start a vite dev server in middleware mode (it never binds a port — it only transforms and
  * watches) plus an in-process module runner. `configFile: false` keeps loading predictable and
- * independent of any user `vite.config`; esbuild handles TypeScript out of the box. `ignored` adds
- * watch-ignore globs on top of vite's defaults — `skein dev` uses it to exclude its own `.skein/`
- * state dir, whose periodic writes would otherwise trigger an endless reload loop.
+ * independent of any user `vite.config`; esbuild handles TypeScript out of the box. We still turn on
+ * vite's native tsconfig `paths` resolution (`resolve.tsconfigPaths`), so graphs that import
+ * workspace packages through path aliases (e.g. `@myorg/js`, the standard Nx/Turborepo/pnpm-workspace
+ * pattern) resolve the same way they do under `langgraph dev` and `tsc`. `ignored` adds
+ * watch-ignore globs on top of vite's defaults —
+ * `skein dev` uses it to exclude its own `.skein/` state dir, whose periodic writes would otherwise
+ * trigger an endless reload loop.
  */
 export async function createViteGraphLoader(
   root: string,
   ignored: string[] = [],
 ): Promise<ViteGraphLoader> {
+  // Aliased lib sources live at the monorepo root, not the app-level `root` (the `langgraph.json`
+  // dir). Reuse vite's own workspace-root detection (pnpm-workspace.yaml / lerna.json / a
+  // `workspaces` package.json) so the file-serving allowlist matches what vite would pick by default.
+  const workspaceRoot = searchForWorkspaceRoot(root);
   const server: ViteDevServer = await createServer({
     root,
     configFile: false,
+    // Resolve tsconfig `paths` natively (vite 8+): vite reads the project's tsconfig, follows
+    // `extends` to a base tsconfig (e.g. `tsconfig.base.json`), and honors `baseUrl` + wildcard
+    // aliases — so graphs that import workspace packages through path aliases resolve.
+    resolve: { tsconfigPaths: true },
     appType: "custom",
     logLevel: "warn",
     server: {
@@ -58,6 +75,9 @@ export async function createViteGraphLoader(
       // port so instances never clash.
       hmr: { port: await findFreePort() },
       watch: { ignored: ["**/node_modules/**", "**/.git/**", "**/dist/**", ...ignored] },
+      // Aliased lib sources resolve outside the app `root` (e.g. `../../libs/**`). Widen vite's
+      // file-serving allowlist to the workspace root so the module runner can transform them.
+      fs: { allow: [workspaceRoot] },
     },
     optimizeDeps: { noDiscovery: true },
   });
