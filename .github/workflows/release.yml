@@ -16,7 +16,33 @@ permissions:
   id-token: write # required for OIDC trusted publishing + provenance
 
 jobs:
+  # Gate: don't publish unless the released commit already passed CI (ci.yml). Releases are cut from
+  # main, which CI runs on push, so a run for this SHA exists — we wait for both its jobs to conclude
+  # green. A missing/failed/cancelled run (e.g. a newer push cancelled it via ci.yml's concurrency)
+  # blocks the publish; re-run CI on the tagged commit, then re-run this workflow.
+  wait-for-ci:
+    name: wait for CI
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+    steps:
+      - name: Wait for lint · typecheck · test · build
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: "lint · typecheck · test · build"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+      - name: Wait for integration tests (Testcontainers)
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: "integration tests (Testcontainers)"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+
   publish:
+    needs: wait-for-ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +60,8 @@ jobs:
       - run: npm install -g npm@11
       - run: pnpm install --frozen-lockfile
 
-      # Build + typecheck as a release gate (tests run on PRs via ci.yml).
+      # Build the packages (packing needs the built dist/); typecheck as a cheap extra gate. The test
+      # gate lives in the wait-for-ci job above — this workflow won't reach here unless CI passed.
       - run: pnpm exec nx run-many -t build typecheck --output-style=stream
 
       # Bootstrap only: if an NPM_TOKEN secret is set, use it. Otherwise leave npm to authenticate via
