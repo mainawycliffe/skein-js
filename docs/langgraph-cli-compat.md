@@ -98,7 +98,7 @@ postgres --queue redis`), and dev state persists across restarts — both beyond
 CLI dev server, and both fully opt-in. The wire behavior your clients see is unchanged either way.
 
 If any of this ever _does_ change observable behavior versus the LangGraph CLI, that's a
-compatibility bug — please [report it](https://github.com/mainawycliffe/skein-js/issues).
+compatibility bug — please [report it](https://github.com/skein-js/skein-js/issues).
 
 ## `langgraph.json` — fields we honor
 

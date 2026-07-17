@@ -47,7 +47,7 @@ jobs:
 
       # Build the packages (packing needs the built dist/); typecheck as a cheap extra gate. The full
       # test gate lives in the `ci` job above — this workflow won't reach here unless CI passed.
-      - run: pnpm exec nx run-many -t build typecheck --output-style=stream
+      - run: pnpm exec nx run-many -t build typecheck --exclude='*example-*' --output-style=stream
 
       # Bootstrap only: if an NPM_TOKEN secret is set, use it. Otherwise leave npm to authenticate via
       # OIDC (no token line at all — an empty one would break trusted publishing).

@@ -72,7 +72,7 @@ unchanged.
 - **🔁 Drop-in LangGraph CLI compatibility.** `skein dev` / `up` / `build` mirror the LangGraph CLI,
   and your `langgraph.json` stays **unchanged**. Migrating off (or comparing against) the LangGraph
   CLI is a one-word change. If something works under `langgraph dev` but not `skein dev`, that's a
-  bug we want to hear about — [please file it](https://github.com/mainawycliffe/skein-js/issues).
+  bug we want to hear about — [please file it](https://github.com/skein-js/skein-js/issues).
 - **♻️ Reuse first.** On JavaScript the Agent Protocol server internals are already open source
   ([`@langchain/langgraph-api`](https://www.npmjs.com/package/@langchain/langgraph-api), MIT), so
   skein-js doesn't rebuild them. It reuses the LangGraph runtime, checkpointers, `langgraph.json`
@@ -529,8 +529,8 @@ Full design and how-to guides live in [`docs/`](./docs):
 skein-js is young and we'd love your help — especially **LangGraph CLI compatibility reports** (does
 your `langgraph dev` project work under `skein dev`?).
 
-- 🐛 **Found a bug or a compatibility gap?** [Open an issue](https://github.com/mainawycliffe/skein-js/issues).
-- 💡 **Want a feature or a new framework adapter?** [Start a discussion or file an issue](https://github.com/mainawycliffe/skein-js/issues).
+- 🐛 **Found a bug or a compatibility gap?** [Open an issue](https://github.com/skein-js/skein-js/issues).
+- 💡 **Want a feature or a new framework adapter?** [Start a discussion or file an issue](https://github.com/skein-js/skein-js/issues).
 - 🙌 **Want to contribute code?** PRs are very welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) to
   get set up (and [AGENTS.md](./AGENTS.md) for the deep contributor guide).
 

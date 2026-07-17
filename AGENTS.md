@@ -111,7 +111,7 @@ pnpm release 0.3.0            # or: patch | minor | major
 [`.github/workflows/release.yml`](.github/workflows/release.yml) runs on `release: published` and
 publishes each changed, non-private package with provenance via npm OIDC trusted publishing.
 
-Prerequisites: the git remote must point at `mainawycliffe/skein-js` (Nx derives the release repo from
+Prerequisites: the git remote must point at `skein-js/skein-js` (Nx derives the release repo from
 `origin`), and `gh` must be authenticated (or `GITHUB_TOKEN` set) for the GitHub Release step.
 
 ## Package map

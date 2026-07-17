@@ -4,14 +4,14 @@
   "description": "Private test helpers for skein-js: Testcontainers boots + the shared SkeinStore conformance suite.",
   "license": "Apache-2.0",
   "author": "Maina Wycliffe <wmmaina7@gmail.com>",
-  "homepage": "https://github.com/mainawycliffe/skein-js/tree/main/packages/test-support#readme",
+  "homepage": "https://github.com/skein-js/skein-js/tree/main/packages/test-support#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mainawycliffe/skein-js.git",
+    "url": "git+https://github.com/skein-js/skein-js.git",
     "directory": "packages/test-support"
   },
   "bugs": {
-    "url": "https://github.com/mainawycliffe/skein-js/issues"
+    "url": "https://github.com/skein-js/skein-js/issues"
   },
   "keywords": [
     "skein",

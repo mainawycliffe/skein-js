@@ -8,7 +8,7 @@ sending a pull request, you're very welcome here.
 
 ## Report a bug or request a feature
 
-The fastest way to help is to [**open an issue**](https://github.com/mainawycliffe/skein-js/issues).
+The fastest way to help is to [**open an issue**](https://github.com/skein-js/skein-js/issues).
 
 A great bug report includes:
 
