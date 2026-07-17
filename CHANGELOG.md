@@ -1,3 +1,13 @@
+## 0.6.3 (2026-07-17)
+
+### 🩹 Fixes
+
+- **release:** point package repository URL at skein-js/skein-js; scope publish build to packages ([fef1875](https://github.com/skein-js/skein-js/commit/fef1875))
+
+### ❤️ Thank You
+
+- Maina Wycliffe
+
 ## 0.6.2 (2026-07-17)
 
 This was a version bump only, there were no code changes.
