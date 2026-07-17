@@ -24,7 +24,9 @@ function apiKeyEngine(): AuthEngine {
       };
     },
     authorize: async ({ value, context }) =>
-      context ? { filters: { owner: context.user.identity }, value } : { filters: undefined, value },
+      context
+        ? { filters: { owner: context.user.identity }, value }
+        : { filters: undefined, value },
     matchesFilters: (metadata, filters) =>
       !filters ||
       Object.entries(filters).every(([key, clause]) =>
@@ -61,7 +63,10 @@ describe("@skein-js/express auth", () => {
       body: "{}",
     });
     expect(created.status).toBe(200);
-    const thread = (await created.json()) as { thread_id: string; metadata: Record<string, unknown> };
+    const thread = (await created.json()) as {
+      thread_id: string;
+      metadata: Record<string, unknown>;
+    };
     expect(thread.metadata.owner).toBe("alice");
 
     // Bob cannot see Alice's thread.

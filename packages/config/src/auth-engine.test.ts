@@ -68,9 +68,7 @@ describe("loadAuthEngine", () => {
   };
 
   it("returns a filter from a matching on-handler", async () => {
-    const auth = new Auth()
-      .authenticate(() => "u")
-      .on("threads:create", () => ({ owner: "u" }));
+    const auth = new Auth().authenticate(() => "u").on("threads:create", () => ({ owner: "u" }));
     const engine = await engineFor(auth);
     const result = await engine!.authorize({
       resource: "threads",

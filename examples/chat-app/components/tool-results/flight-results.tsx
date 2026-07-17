@@ -49,7 +49,9 @@ export function FlightResults({ result }: { result: FlightSearchResult }) {
         </div>
       ))}
 
-      <p className="text-[11px] text-muted-foreground">Ask me to book one and I&apos;ll confirm first.</p>
+      <p className="text-[11px] text-muted-foreground">
+        Ask me to book one and I&apos;ll confirm first.
+      </p>
     </div>
   );
 }

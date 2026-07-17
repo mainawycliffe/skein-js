@@ -64,7 +64,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
 /** Parse a `get_weather` result, or null if it isn't a well-formed weather payload. */
 export function parseWeather(json: string | undefined): WeatherResult | null {
   const value = safeParse(json);
-  if (!isObject(value) || typeof value["location"] !== "string" || !Array.isArray(value["forecast"])) {
+  if (
+    !isObject(value) ||
+    typeof value["location"] !== "string" ||
+    !Array.isArray(value["forecast"])
+  ) {
     return null;
   }
   return value as unknown as WeatherResult;

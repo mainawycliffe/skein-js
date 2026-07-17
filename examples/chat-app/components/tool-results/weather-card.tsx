@@ -13,7 +13,13 @@ const CONDITION_ICONS: Record<WeatherCondition, ComponentType<{ className?: stri
   windy: Wind,
 };
 
-function ConditionIcon({ condition, className }: { condition: WeatherCondition; className?: string }) {
+function ConditionIcon({
+  condition,
+  className,
+}: {
+  condition: WeatherCondition;
+  className?: string;
+}) {
   const Icon = CONDITION_ICONS[condition] ?? Cloud;
   return <Icon className={className} />;
 }
@@ -36,7 +42,10 @@ export function WeatherCard({ weather }: { weather: WeatherResult }) {
             </span>
           </div>
         </div>
-        <ConditionIcon condition={weather.current.condition} className="size-8 text-muted-foreground" />
+        <ConditionIcon
+          condition={weather.current.condition}
+          className="size-8 text-muted-foreground"
+        />
       </div>
 
       <div className="mt-3 grid grid-cols-5 gap-1.5">

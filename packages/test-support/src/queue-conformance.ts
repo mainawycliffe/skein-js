@@ -50,7 +50,8 @@ export function runRunQueueConformance(label: string, makeQueue: RunQueueFactory
       return queue;
     };
     afterEach(async () => {
-      for (const instance of created.splice(0)) if (isDisposable(instance)) await instance.dispose();
+      for (const instance of created.splice(0))
+        if (isDisposable(instance)) await instance.dispose();
     });
 
     it("delivers enqueued runs to a consumer in FIFO order", async () => {
@@ -99,7 +100,8 @@ export function runRunEventBusConformance(label: string, makeBus: RunEventBusFac
       return bus;
     };
     afterEach(async () => {
-      for (const instance of created.splice(0)) if (isDisposable(instance)) await instance.dispose();
+      for (const instance of created.splice(0))
+        if (isDisposable(instance)) await instance.dispose();
     });
 
     it("replays buffered frames to a late subscriber, then completes on close", async () => {

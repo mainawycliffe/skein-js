@@ -22,7 +22,10 @@ export function ApprovalCard({
 }) {
   const { flight } = request;
   return (
-    <div className="rounded-lg border-2 border-primary/40 bg-background p-4" data-testid="approval-card">
+    <div
+      className="rounded-lg border-2 border-primary/40 bg-background p-4"
+      data-testid="approval-card"
+    >
       <div className="text-sm font-medium">Confirm booking</div>
       <p className="mt-0.5 text-xs text-muted-foreground">
         The assistant paused and is waiting for your approval before booking.

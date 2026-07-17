@@ -20,7 +20,9 @@ describe("extractToolActivity", () => {
   });
 
   it("reports tool-result messages with their name and call id", () => {
-    const data = { tools: { messages: [{ type: "tool", name: "web_search", tool_call_id: "call_1" }] } };
+    const data = {
+      tools: { messages: [{ type: "tool", name: "web_search", tool_call_id: "call_1" }] },
+    };
     expect(extractToolActivity(data).results).toEqual([{ name: "web_search", id: "call_1" }]);
   });
 

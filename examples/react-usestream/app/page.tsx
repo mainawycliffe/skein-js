@@ -22,9 +22,7 @@ function messageText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .map((part) =>
-        typeof part === "string" ? part : ((part as { text?: string }).text ?? ""),
-      )
+      .map((part) => (typeof part === "string" ? part : ((part as { text?: string }).text ?? "")))
       .join("");
   }
   if (content == null) return "";

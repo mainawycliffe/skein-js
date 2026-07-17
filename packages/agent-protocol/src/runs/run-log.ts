@@ -36,7 +36,10 @@ function messageType(node: Record<string, unknown>): string | undefined {
  * messages), wherever they sit in the shape the current stream mode produced. Depth-bounded and
  * cycle-safe; returns empty arrays for anything it can't read.
  */
-export function extractToolActivity(data: unknown): { calls: ToolActivity[]; results: ToolActivity[] } {
+export function extractToolActivity(data: unknown): {
+  calls: ToolActivity[];
+  results: ToolActivity[];
+} {
   const calls: ToolActivity[] = [];
   const results: ToolActivity[] = [];
   const seen = new Set<unknown>();
@@ -49,7 +52,10 @@ export function extractToolActivity(data: unknown): { calls: ToolActivity[]; res
     if (Array.isArray(toolCalls)) {
       for (const call of toolCalls) {
         if (isRecord(call) && typeof call["name"] === "string" && call["name"].length > 0) {
-          calls.push({ name: call["name"], id: typeof call["id"] === "string" ? call["id"] : undefined });
+          calls.push({
+            name: call["name"],
+            id: typeof call["id"] === "string" ? call["id"] : undefined,
+          });
         }
       }
     }

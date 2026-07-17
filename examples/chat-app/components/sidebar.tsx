@@ -22,10 +22,7 @@ export function Sidebar({
   onSelectChat: (threadId: string) => void;
 }) {
   return (
-    <aside
-      className="flex w-64 shrink-0 flex-col border-r bg-muted/30"
-      data-testid="chat-sidebar"
-    >
+    <aside className="flex w-64 shrink-0 flex-col border-r bg-muted/30" data-testid="chat-sidebar">
       <div className="p-3">
         <Button variant="outline" className="w-full justify-start" onClick={onNewChat}>
           <Plus />

@@ -23,39 +23,31 @@ describe.skipIf(!hasKey)("gemini-chat over @langchain/langgraph-sdk (live Gemini
     await started.close();
   });
 
-  it(
-    "waits for a Gemini reply on a fresh thread",
-    async () => {
-      const thread = await client.threads.create();
-      const values = (await client.runs.wait(thread.thread_id, "gemini", {
-        input: { messages: [{ role: "user", content: "Say hello in one short sentence." }] },
-      })) as { messages?: Array<{ type?: string; content?: unknown }> };
+  it("waits for a Gemini reply on a fresh thread", async () => {
+    const thread = await client.threads.create();
+    const values = (await client.runs.wait(thread.thread_id, "gemini", {
+      input: { messages: [{ role: "user", content: "Say hello in one short sentence." }] },
+    })) as { messages?: Array<{ type?: string; content?: unknown }> };
 
-      const messages = values.messages ?? [];
-      const reply = messages.at(-1);
-      expect(reply?.type).toBe("ai");
-      expect(JSON.stringify(reply?.content ?? "").length).toBeGreaterThan(0);
-    },
-    30_000,
-  );
+    const messages = values.messages ?? [];
+    const reply = messages.at(-1);
+    expect(reply?.type).toBe("ai");
+    expect(JSON.stringify(reply?.content ?? "").length).toBeGreaterThan(0);
+  }, 30_000);
 
-  it(
-    "streams the reply token-by-token",
-    async () => {
-      const thread = await client.threads.create();
-      const chunks: string[] = [];
+  it("streams the reply token-by-token", async () => {
+    const thread = await client.threads.create();
+    const chunks: string[] = [];
 
-      for await (const chunk of client.runs.stream(thread.thread_id, "gemini", {
-        input: { messages: [{ role: "user", content: "Count from one to five." }] },
-        streamMode: "messages",
-      })) {
-        chunks.push(JSON.stringify(chunk));
-      }
+    for await (const chunk of client.runs.stream(thread.thread_id, "gemini", {
+      input: { messages: [{ role: "user", content: "Count from one to five." }] },
+      streamMode: "messages",
+    })) {
+      chunks.push(JSON.stringify(chunk));
+    }
 
-      // At least one streamed frame, and the run ended cleanly (no error event).
-      expect(chunks.length).toBeGreaterThan(0);
-      expect(chunks.join("\n")).not.toContain('"event":"error"');
-    },
-    30_000,
-  );
+    // At least one streamed frame, and the run ended cleanly (no error event).
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.join("\n")).not.toContain('"event":"error"');
+  }, 30_000);
 });

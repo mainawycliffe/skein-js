@@ -61,7 +61,9 @@ export const getWeatherTool = tool(
     name: "get_weather",
     description:
       "Get the current conditions and a 5-day forecast for a city. Returns structured JSON the UI renders as a weather card.",
-    schema: z.object({ location: z.string().describe("City name, e.g. 'Tokyo' or 'San Francisco'") }),
+    schema: z.object({
+      location: z.string().describe("City name, e.g. 'Tokyo' or 'San Francisco'"),
+    }),
   },
 );
 

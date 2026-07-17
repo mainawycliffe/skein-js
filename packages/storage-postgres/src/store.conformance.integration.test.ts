@@ -1,4 +1,8 @@
-import { runSkeinStoreConformance, startPostgres, type StartedResource } from "@skein-js/test-support";
+import {
+  runSkeinStoreConformance,
+  startPostgres,
+  type StartedResource,
+} from "@skein-js/test-support";
 import { afterAll, beforeAll } from "vitest";
 
 import { PostgresSkeinStore } from "./postgres-skein-store.js";

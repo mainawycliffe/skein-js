@@ -174,7 +174,9 @@ export async function loadAuthEngine(
 
   const exported = module[spec.exportSymbol];
   if (exported == null) {
-    throw new SkeinConfigError(`Auth module "${spec.sourceFile}" has no export "${spec.exportSymbol}".`);
+    throw new SkeinConfigError(
+      `Auth module "${spec.sourceFile}" has no export "${spec.exportSymbol}".`,
+    );
   }
   if (!isAuthInstance(exported)) {
     throw new SkeinConfigError(
