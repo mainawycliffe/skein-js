@@ -34,7 +34,10 @@ the LangGraph CLI** (`skein dev` ⇄ `langgraph dev`, unchanged `langgraph.json`
    so Vitest runs once; `examples/*` excluded — they need live services / local `.env`) for whatever
    your staged changes touch. Build and the Docker-backed integration tests run in
    [CI](.github/workflows/ci.yml) — run them locally too for anything substantial
-   (`nx run-many -t build test-integration`). Keep docs current with any behavior/architecture change.
+   (`nx run-many -t build test-integration`). Keep docs current with any behavior/architecture change —
+   and when you touch a user-facing doc, regenerate the LLM bundle with `pnpm docs:llms` (rebuilds
+   [`llms-full.txt`](llms-full.txt) from the curated list in `scripts/generate-llms-full.mjs`; the
+   hand-written index is [`llms.txt`](llms.txt)).
    [`/commit`](.claude/skills/commit/SKILL.md) does the full local run + docs check for you. Only
    bypass the hook (`git commit --no-verify`) in a genuine pinch, and go green before you push. Same
    bar as [Definition of done](#definition-of-done).

@@ -57,6 +57,24 @@ The background run worker and the in-memory driver need a **long-lived Node proc
 [Redis queue](../runtime-redis) + [Postgres store](../storage-postgres) (pass `{ deps }` from
 [`@skein-js/runtime`](../runtime)'s `buildRuntime`) so state and runs don't depend on one process.
 
+## API
+
+- **`createSkeinRouteHandlers(options): SkeinRouteHandlers`** — App Router (recommended); returns
+  `{ GET, POST, PUT, PATCH, DELETE, OPTIONS }` to re-export from `app/<base>/[...path]/route.ts`.
+- **`createSkeinPagesHandler(options): SkeinPagesHandler`** — Pages Router; the default export for
+  `pages/api/[...path].ts`.
+- Both accept `SkeinRouteHandlerOptions` / `SkeinPagesHandlerOptions`: the shared
+  `{ config, importModule? } | { deps }` seam **plus** an optional `cors` (off by default) and a
+  `basePath` (defaults to `/api`, matching the mount). `deps` comes from
+  [`@skein-js/runtime`](../runtime)'s `buildRuntime` for production Postgres/Redis.
+- **`getSkeinRuntime(options): Promise<ResolvedProtocolRuntime>`** — the memoized runtime accessor
+  shared by both routers (survives dev module reloads); its `.runtime` is the `ProtocolRuntime`
+  (assistants, handlers, worker).
+- **`SkeinRuntimeOptions`** — the shared runtime-resolution option shape, re-exported for typing your
+  own wrappers.
+- Low-level serializers: `toWebResponse` / `webErrorResponse` (Web `Response`), plus
+  `sendNodeResponse` / `sendNodeError` (re-exported from [`@skein-js/server-kit`](../server-kit)).
+
 ## Learn more
 
 - [`@skein-js/express`](../server-express) — the reference adapter

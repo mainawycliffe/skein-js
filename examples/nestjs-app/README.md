@@ -19,6 +19,23 @@ class AppModule {}
 See [`src/main.ts`](./src/main.ts). The same two graphs as [`nestjs-basic`](../nestjs-basic) are
 served (`echo`, `agent`).
 
+## What you'll learn
+
+- How to serve the Agent Protocol from a NestJS app that **already has its own controllers**, using
+  `SkeinModule.forRoot(...)` in your root module.
+- Why the module mounts as **middleware** that claims only skein's paths and passes everything else
+  through — so your `TodosController` is untouched and there's no route collision.
+- How to relocate the protocol under a path (the `RouterModule` tip below) and where to enable
+  shutdown hooks so the background run worker drains on exit.
+
+## What to look at
+
+| File                                     | Why                                                             |
+| ---------------------------------------- | --------------------------------------------------------------- |
+| [`src/main.ts`](./src/main.ts)           | Bootstraps Nest, imports `SkeinModule`, enables shutdown hooks. |
+| [`langgraph.json`](./langgraph.json)     | The two graphs (`echo`, `agent`) the module serves.             |
+| [`src/main.test.ts`](./src/main.test.ts) | Proves the controller and the protocol coexist in one app.      |
+
 ## How to run
 
 ```bash

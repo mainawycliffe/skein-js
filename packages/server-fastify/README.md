@@ -51,6 +51,25 @@ await app.listen({ port: 3000 });
 SSE responses take over the raw Node response (`reply.hijack()` + `reply.raw`) and stream the
 pre-serialized frames the engine produced, tearing the run's subscription down on client disconnect.
 
+## API
+
+- **`createFastifyServer(options): Promise<SkeinFastifyServer>`** — a standalone server;
+  `SkeinFastifyServer` = `{ app, runtime, listen(port?, host?), close() }`. `listen` defaults to port
+  `2024`, host `"localhost"`; `close()` stops the run worker then the HTTP server.
+- **`skeinPlugin`** — a Fastify plugin: `await app.register(skeinPlugin, { prefix, ...options })`
+  mounts the protocol under `prefix`. Encapsulated, so skein's routes + CORS stay isolated from the
+  host app. Options: `SkeinPluginOptions` (an alias of `SkeinRuntimeOptions`); `prefix` is Fastify's
+  own `register` option, not part of the type.
+- **`registerSkeinHandlers(app, handlers, options?)`** — the lower-level registration primitive
+  (`handlers` is a `ProtocolHandlers`; `options` is `HandlerRoutesOptions`), for callers wiring routes
+  onto their own handler table.
+- **`SkeinRuntimeOptions`** — the shared seam every adapter accepts: common `{ logger?, cors?, warm? }`
+  **plus** either `{ config, importModule? }` (in-memory runtime from a `langgraph.json`) **or**
+  `{ deps }` (bring-your-own `ProtocolDeps`, e.g. from [`@skein-js/runtime`](../runtime)'s
+  `buildRuntime`). `warm: true` eagerly loads graphs at startup.
+- **`skeinRoutes`** — the transport-neutral route table, re-exported for composing your own routing.
+- Low-level mappers: `toProtocolRequest`, `sendProtocolResponse`, `sendErrorResponse`.
+
 ## Learn more
 
 - [`@skein-js/express`](../server-express) — the reference adapter

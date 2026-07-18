@@ -40,6 +40,14 @@ import { Client } from "@langchain/langgraph-sdk";
 const client = new Client({ apiUrl: "http://localhost:2024/api" });
 ```
 
+## What to look at
+
+- [`pages/api/[...path].ts`](./pages/api/%5B...path%5D.ts) — the one catch-all route that serves the
+  whole protocol via `createSkeinPagesHandler`.
+- [`lib/skein-deps.ts`](./lib/skein-deps.ts) — the statically imported graphs assembled into a
+  `ProtocolDeps` with the in-memory drivers, exposed as the `{ deps }` seam (`echo` eager, `agent`
+  lazy so a keyless build stays green).
+
 ## Deployment caveat
 
 The in-memory drivers and the background run worker need a long-lived Node process (`next start` with

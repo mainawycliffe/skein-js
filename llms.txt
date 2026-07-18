@@ -1,0 +1,57 @@
+# skein-js
+
+> A TypeScript Agent Protocol server for LangGraph.js, and a drop-in replacement for the LangGraph CLI (`skein dev` ⇄ `langgraph dev`). Serve any LangGraph.js graph as a standard HTTP + SSE agent server — threads, runs, streaming, interrupts, long-term memory — from Express, Fastify, NestJS, or Next.js. Self-hosted, open source (Apache-2.0).
+
+skein-js implements LangChain's Agent Protocol, so the whole LangChain client ecosystem (`@langchain/langgraph-sdk`, the `useStream` React hook, Agent Chat UI, LangGraph Studio) works against your server by changing only a URL — no custom SDK, no bespoke wire format. It deliberately reuses LangGraph OSS (runtime, checkpointers, config parser, schemas, SDK types) and rebuilds only the durable-production, multi-framework, drop-in-CLI layer OSS lacks. The one thing to know when consuming it: every framework adapter takes the same `{ config } | { deps }` options bag — point it at a `langgraph.json`, or hand it a `ProtocolDeps` you assembled (in-memory for dev, Postgres + Redis for production).
+
+## Getting started
+
+- [Getting started](https://github.com/skein-js/skein-js/blob/main/docs/getting-started.md): Guided walkthrough from zero to a running server, then to production (both on-ramps).
+- [Using skein-js](https://github.com/skein-js/skein-js/blob/main/docs/using-skein.md): Terse consumer/agent cheat-sheet — install, the `{ config } | { deps }` seam, mount on each framework, call it.
+- [Recipes](https://github.com/skein-js/skein-js/blob/main/docs/recipes.md): Task snippets — custom auth, human-in-the-loop, long-term memory, CORS, background runs, webhooks, deploy.
+- [Overview & architecture](https://github.com/skein-js/skein-js/blob/main/docs/index.md): The problem skein solves, what the Agent Protocol is, and how skein is built.
+- [README](https://github.com/skein-js/skein-js/blob/main/README.md): The project landing page — principles, quick start, package tour.
+
+## Guides
+
+- [LangGraph CLI compatibility](https://github.com/skein-js/skein-js/blob/main/docs/langgraph-cli-compat.md): Every `langgraph.json` field + the `skein` command mapping (`dev`/`up`/`build`/`dockerfile`).
+- [Embedding a graph in code](https://github.com/skein-js/skein-js/blob/main/docs/embedding.md): The in-code on-ramp — serve a compiled graph with no `langgraph.json` and no CLI.
+- [Agent Protocol surface](https://github.com/skein-js/skein-js/blob/main/docs/agent-protocol.md): The REST + SSE endpoint inventory skein implements, plus the auth route→permission map.
+- [Streaming](https://github.com/skein-js/skein-js/blob/main/docs/streaming.md): LangGraph stream modes mapped onto Agent Protocol SSE, with cross-instance fan-out.
+- [React SDK / useStream](https://github.com/skein-js/skein-js/blob/main/docs/react-sdk.md): Frontend compatibility — `@langchain/langgraph-sdk` and `useStream` over SSE.
+- [Storage](https://github.com/skein-js/skein-js/blob/main/docs/storage.md): `SkeinStore`, in-memory vs Postgres, pgvector semantic search, checkpointer, and `getStore()` in a graph.
+- [Runs & Redis](https://github.com/skein-js/skein-js/blob/main/docs/runs-and-redis.md): The run engine, the queue, and cross-instance streaming with Redis.
+- [Building a custom adapter](https://github.com/skein-js/skein-js/blob/main/docs/building-an-adapter.md): Put skein on any HTTP framework via the transport-neutral handler table.
+
+## API by package
+
+- [@skein-js/core](https://github.com/skein-js/skein-js/tree/main/packages/core#readme): The shared contract — Agent Protocol wire types + `SkeinStore`/queue/bus/auth interfaces + `SkeinHttpError`.
+- [@skein-js/agent-protocol](https://github.com/skein-js/skein-js/tree/main/packages/agent-protocol#readme): The framework-agnostic engine — run engine, handler table, SSE. `createProtocolRuntime`, `skeinRoutes`.
+- [@skein-js/config](https://github.com/skein-js/skein-js/tree/main/packages/config#readme): `langgraph.json` parser + graph loader. `loadConfig`.
+- [@skein-js/server-kit](https://github.com/skein-js/skein-js/tree/main/packages/server-kit#readme): Shared adapter building blocks. `embedInMemoryGraphs`, in-memory runtime, CORS.
+- [@skein-js/runtime](https://github.com/skein-js/skein-js/tree/main/packages/runtime#readme): Assembles production deps. `buildRuntime` (from `langgraph.json`), `embedPostgresGraphs` (from graphs in code).
+- [@skein-js/express](https://github.com/skein-js/skein-js/tree/main/packages/server-express#readme): Express adapter — `createExpressServer`, `skeinRouter` (the reference adapter).
+- [@skein-js/fastify](https://github.com/skein-js/skein-js/tree/main/packages/server-fastify#readme): Fastify adapter — `createFastifyServer`, `skeinPlugin`.
+- [@skein-js/nestjs](https://github.com/skein-js/skein-js/tree/main/packages/server-nestjs#readme): NestJS adapter — `SkeinModule.forRoot`, `createNestServer`.
+- [@skein-js/nextjs](https://github.com/skein-js/skein-js/tree/main/packages/server-nextjs#readme): Next.js adapter — `createSkeinRouteHandlers` (App Router), `createSkeinPagesHandler` (Pages Router).
+- [@skein-js/storage-memory](https://github.com/skein-js/skein-js/tree/main/packages/storage-memory#readme): In-memory `SkeinStore` + queue (dev/tests).
+- [@skein-js/storage-postgres](https://github.com/skein-js/skein-js/tree/main/packages/storage-postgres#readme): Postgres `SkeinStore` + pgvector; reuses `PostgresSaver`.
+- [@skein-js/redis](https://github.com/skein-js/skein-js/tree/main/packages/runtime-redis#readme): Redis run queue + cross-instance pub/sub streaming.
+- [skein-js (CLI)](https://github.com/skein-js/skein-js/tree/main/packages/cli#readme): The drop-in CLI — `dev` / `up` / `build` / `dockerfile` / `import-langgraph`.
+
+## Examples
+
+- [express-basic](https://github.com/skein-js/skein-js/tree/main/examples/express-basic): Zero-setup `echo` + a model-backed `agent` graph from one `langgraph.json`.
+- [embed-graph](https://github.com/skein-js/skein-js/tree/main/examples/embed-graph): In-code embedding with no `langgraph.json` (`embedInMemoryGraphs` + `{ deps }`).
+- [chat-app](https://github.com/skein-js/skein-js/tree/main/examples/chat-app): Flagship — a Gemini research assistant (thinking + web search + long-term memory) with a Next.js + shadcn UI.
+- [gemini-chat](https://github.com/skein-js/skein-js/tree/main/examples/gemini-chat): Model-backed end-to-end — a Gemini ReAct agent streamed into a browser.
+- [migrated-langgraph](https://github.com/skein-js/skein-js/tree/main/examples/migrated-langgraph): The drop-in proof — a stock LangGraph project run under `skein dev`.
+- [Framework adapters](https://github.com/skein-js/skein-js/tree/main/examples): fastify-basic/-app, nestjs-basic/-app, nextjs-basic/-app (standalone + embedded), react-usestream.
+
+## Optional
+
+- [Reuse-first architecture](https://github.com/skein-js/skein-js/blob/main/docs/reuse.md): What skein reuses from LangGraph OSS vs rebuilds.
+- [Roadmap](https://github.com/skein-js/skein-js/blob/main/docs/roadmap.md): Milestones, shipped features, known gaps vs LangGraph, and non-goals.
+- [Deploy on Railway](https://github.com/skein-js/skein-js/blob/main/docs/deploy-railway.md): Running the Docker image on a PaaS.
+- [AGENTS.md](https://github.com/skein-js/skein-js/blob/main/AGENTS.md): For agents/humans working ON skein itself (contributor guide), not consuming it.
+- [llms-full.txt](https://github.com/skein-js/skein-js/blob/main/llms-full.txt): The user-facing docs concatenated into one file for wholesale ingestion.

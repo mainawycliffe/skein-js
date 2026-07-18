@@ -42,6 +42,14 @@ weather tool), so it needs `GOOGLE_API_KEY` set. Ask it something like _"what's 
 Nairobi?"_. (The zero-setup `echo` graph is still served over the API for the SDK/tests; this UI just
 doesn't point at it.)
 
+## What to look at
+
+- [`app/api/[...path]/route.ts`](./app/api/%5B...path%5D/route.ts) — the same-origin backend: one
+  catch-all route re-exporting the per-method handlers from `createSkeinRouteHandlers`.
+- [`app/page.tsx`](./app/page.tsx) — the `useStream` chat UI pointed at the app's own `/api`.
+- [`lib/skein-deps.ts`](./lib/skein-deps.ts) — graphs wrapped with `embedInMemoryGraphs` into the
+  `{ deps }` seam (swap for `buildRuntime`/`embedPostgresGraphs` to go durable).
+
 ## Deployment caveat
 
 The in-memory drivers + background run worker need a long-lived Node process (`next start`, Node

@@ -34,6 +34,7 @@ function requestLogger(logger: Logger): RequestHandler {
   };
 }
 
+/** The result of {@link createExpressServer}: the Express app, the wired runtime, and lifecycle helpers. */
 export interface SkeinExpressServer {
   /** The Express app, protocol mounted at `/`. Mount extra middleware or routes before `listen`. */
   app: Express;

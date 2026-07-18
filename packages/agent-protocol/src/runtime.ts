@@ -9,13 +9,19 @@ import type { ProtocolDeps } from "./deps.js";
 import { createRunWorker, type RunWorker, type RunWorkerOptions } from "./runs/run-worker.js";
 import { createProtocolServiceFromContext, type ProtocolService } from "./service.js";
 
+/** Options for {@link createProtocolRuntime}. */
 export interface ProtocolRuntimeOptions {
+  /** Tuning for the background run worker (concurrency, poll interval). */
   worker?: RunWorkerOptions;
 }
 
+/** The wired engine: the service, the transport-neutral handler table, and the background worker. */
 export interface ProtocolRuntime {
+  /** High-level operations over assistants / threads / runs / store (used to seed assistants). */
   service: ProtocolService;
+  /** The transport-neutral HTTP handler table an adapter dispatches requests into. */
   handlers: ProtocolHandlers;
+  /** The background worker that drains the run queue; `start()` it after seeding assistants. */
   worker: RunWorker;
 }
 

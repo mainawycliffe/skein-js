@@ -533,6 +533,9 @@ Run them with `pnpm test` (fast unit + conformance, no Docker) and `pnpm test:in
 
 Full design and how-to guides live in [`docs/`](./docs):
 
+- [Getting started](./docs/getting-started.md) — the guided path from zero to a running server, then prod
+- [Using skein-js](./docs/using-skein.md) — the terse consumer/agent cheat-sheet (`{ config } | { deps }`)
+- [Recipes](./docs/recipes.md) — auth, human-in-the-loop, long-term memory, CORS, background runs, deploy
 - [Overview & vision](./docs/index.md)
 - [LangGraph CLI compatibility](./docs/langgraph-cli-compat.md) — commands + the `langgraph.json` fields
 - [Embedding a graph you already have](./docs/embedding.md) — the in-code on-ramp (no `langgraph.json`)
@@ -544,6 +547,10 @@ Full design and how-to guides live in [`docs/`](./docs):
 - [Runs & Redis](./docs/runs-and-redis.md) — the run engine and scaling to multiple instances
 - [Reuse-first architecture](./docs/reuse.md) — what we reuse vs. rebuild _(design)_
 - [Roadmap](./docs/roadmap.md)
+
+**For AI agents & tools:** [`llms.txt`](./llms.txt) is a curated, machine-readable index of these docs
+(per the [llmstxt.org](https://llmstxt.org) convention); [`llms-full.txt`](./llms-full.txt) is the same
+set concatenated for wholesale ingestion. Regenerate the latter with `pnpm docs:llms`.
 
 ## Contributing & feedback
 

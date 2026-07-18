@@ -53,6 +53,24 @@ await server.listen(2024);
 SSE responses write directly to the raw Node response and stream the pre-serialized frames the engine
 produced, tearing the run's subscription down on client disconnect.
 
+## API
+
+- **`SkeinModule.forRoot(options): DynamicModule`** — the primary entry point; `imports: [...]` it to
+  mount the protocol as middleware alongside your controllers. `options` is `SkeinRuntimeOptions`.
+- **`SkeinMiddleware`** — the underlying Nest middleware, for callers wiring their own module.
+- **`createNestServer(options): Promise<SkeinNestServer>`** — a standalone server;
+  `SkeinNestServer` = `{ app, runtime, listen(port?, host?), close() }`. `close()` closes the Nest app,
+  which stops the run worker via the module's shutdown hook.
+- **`SKEIN_RUNTIME` / `SKEIN_LOGGER` / `SKEIN_CORS`** — DI tokens; inject `SKEIN_RUNTIME` to reach the
+  `ResolvedProtocolRuntime` from your own providers — its `.runtime` is the `ProtocolRuntime`
+  (assistants, handlers, worker), plus `.cors`.
+- **`SkeinRuntimeOptions`** — the shared seam every adapter accepts: common `{ logger?, cors?, warm? }`
+  **plus** either `{ config, importModule? }` (in-memory runtime from a `langgraph.json`) **or**
+  `{ deps }` (bring-your-own `ProtocolDeps`, e.g. from [`@skein-js/runtime`](../runtime)'s
+  `buildRuntime`).
+- Low-level mappers: `toProtocolRequest`, plus `sendNodeResponse` / `sendNodeError` (re-exported from
+  [`@skein-js/server-kit`](../server-kit)).
+
 ## Learn more
 
 - [`@skein-js/express`](../server-express) — the reference adapter

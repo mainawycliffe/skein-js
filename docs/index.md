@@ -162,22 +162,28 @@ Runnable projects under [`examples/`](../examples) — each proves a slice of th
 ## Documentation map
 
 Start with the user-facing guides; the design docs at the bottom explain how skein-js is built.
+New here? [getting-started.md](./getting-started.md) is the guided path. Building an app _with_ skein
+(especially as an AI agent)? [using-skein.md](./using-skein.md) is the terse cheat-sheet, and the
+machine-readable [`llms.txt`](../llms.txt) / [`llms-full.txt`](../llms-full.txt) index the whole set.
 
-| Doc                                                  | Covers                                                     |
-| ---------------------------------------------------- | ---------------------------------------------------------- |
-| [langgraph-cli-compat.md](./langgraph-cli-compat.md) | `langgraph.json` fields + CLI commands                     |
-| [embedding.md](./embedding.md)                       | The in-code on-ramp — embed a graph, no `langgraph.json`   |
-| [agent-protocol.md](./agent-protocol.md)             | The REST + streaming endpoints skein-js implements         |
-| [building-an-adapter.md](./building-an-adapter.md)   | How to put skein-js on any HTTP framework (custom adapter) |
-| [streaming.md](./streaming.md)                       | LangGraph stream modes → Agent Protocol SSE                |
-| [react-sdk.md](./react-sdk.md)                       | `@langchain/langgraph-sdk` + `useStream` compatibility     |
-| [storage.md](./storage.md)                           | `SkeinStore`, in-memory + Postgres, pgvector, checkpointer |
-| [runs-and-redis.md](./runs-and-redis.md)             | Run engine, queue, cross-instance streaming                |
-| [deploy-railway.md](./deploy-railway.md)             | Deploying the image on Railway (or any PaaS)               |
-| [reuse.md](./reuse.md)                               | _(design)_ What we reuse from LangGraph OSS vs. rebuild    |
-| [code-practices.md](./code-practices.md)             | _(contributor)_ Readability, functional style, conventions |
-| [testing.md](./testing.md)                           | _(contributor)_ Unit + Testcontainers + conformance suite  |
-| [roadmap.md](./roadmap.md)                           | Milestones and post-MVP non-goals                          |
+| Doc                                                  | Covers                                                      |
+| ---------------------------------------------------- | ----------------------------------------------------------- |
+| [getting-started.md](./getting-started.md)           | Guided walkthrough — zero to a running server, then prod    |
+| [using-skein.md](./using-skein.md)                   | Consumer/agent cheat-sheet — install, the seam, mount, call |
+| [recipes.md](./recipes.md)                           | Auth, HITL, memory, CORS, background runs, webhooks, deploy |
+| [langgraph-cli-compat.md](./langgraph-cli-compat.md) | `langgraph.json` fields + CLI commands                      |
+| [embedding.md](./embedding.md)                       | The in-code on-ramp — embed a graph, no `langgraph.json`    |
+| [agent-protocol.md](./agent-protocol.md)             | The REST + streaming endpoints skein-js implements          |
+| [building-an-adapter.md](./building-an-adapter.md)   | How to put skein-js on any HTTP framework (custom adapter)  |
+| [streaming.md](./streaming.md)                       | LangGraph stream modes → Agent Protocol SSE                 |
+| [react-sdk.md](./react-sdk.md)                       | `@langchain/langgraph-sdk` + `useStream` compatibility      |
+| [storage.md](./storage.md)                           | `SkeinStore`, in-memory + Postgres, pgvector, checkpointer  |
+| [runs-and-redis.md](./runs-and-redis.md)             | Run engine, queue, cross-instance streaming                 |
+| [deploy-railway.md](./deploy-railway.md)             | Deploying the image on Railway (or any PaaS)                |
+| [reuse.md](./reuse.md)                               | _(design)_ What we reuse from LangGraph OSS vs. rebuild     |
+| [code-practices.md](./code-practices.md)             | _(contributor)_ Readability, functional style, conventions  |
+| [testing.md](./testing.md)                           | _(contributor)_ Unit + Testcontainers + conformance suite   |
+| [roadmap.md](./roadmap.md)                           | Milestones and post-MVP non-goals                           |
 
 Want to contribute? See [CONTRIBUTING.md](../CONTRIBUTING.md) and [AGENTS.md](../AGENTS.md).
 

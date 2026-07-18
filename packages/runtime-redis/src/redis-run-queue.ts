@@ -15,6 +15,7 @@ import { Queue, Worker } from "bullmq";
 
 const JOB_NAME = "run";
 
+/** Options for {@link RedisRunQueue} — the BullMQ queue name and per-run retry attempts. */
 export interface RedisRunQueueOptions {
   /** BullMQ queue name; also namespaces the Redis keys. Must not contain `:`. Default `"skein-runs"`. */
   queueName?: string;

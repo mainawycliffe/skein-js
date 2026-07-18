@@ -42,6 +42,7 @@ export type StoreDriver = "memory" | "postgres";
 /** Where background runs are queued and stream frames are fanned out. */
 export type QueueDriver = "memory" | "redis";
 
+/** Options for {@link buildRuntime}: which `langgraph.json` to load and which drivers to wire. */
 export interface BuildRuntimeOptions {
   /** Absolute path to `langgraph.json`. */
   configPath: string;
@@ -58,6 +59,10 @@ export interface BuildRuntimeOptions {
   queue: QueueDriver;
 }
 
+/**
+ * The result of {@link buildRuntime}: assembled deps for any adapter's `{ deps }` seam, plus the
+ * lifecycle hooks (`reloadGraphs`, `dispose`, and — in all-memory mode — state snapshot/hydrate).
+ */
 export interface SkeinRuntime {
   /** Assembled dependency bundle to pass as `createExpressServer({ deps })`. */
   deps: ProtocolDeps;

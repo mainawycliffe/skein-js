@@ -38,6 +38,7 @@ export interface GraphRegistry {
   schemas(graphId: string): Promise<GraphSchemas>;
 }
 
+/** The result of {@link loadConfig}: the validated config plus its declared, on-demand graphs. */
 export interface SkeinConfig {
   /** The validated `langgraph.json` contents. */
   config: LanggraphJson;
@@ -49,6 +50,7 @@ export interface SkeinConfig {
   graphs: GraphRegistry;
 }
 
+/** Options for {@link loadConfig} — where to find `langgraph.json` and how to import its graphs. */
 export interface LoadConfigOptions {
   /** Directory to resolve `configPath` (and default discovery) against. Defaults to `process.cwd()`. */
   cwd?: string;
@@ -84,6 +86,26 @@ async function readJsonFile(filePath: string): Promise<unknown> {
   }
 }
 
+/**
+ * Find, read, and validate a `langgraph.json`, resolve each declared graph to an absolute
+ * `path:export` spec, and return a {@link SkeinConfig} whose {@link GraphRegistry} loads a resolved
+ * graph (and its JSON schemas) on demand. This is the entry point every downstream consumer
+ * (`buildRuntime`, the adapters, the CLI) builds on.
+ *
+ * Loading is lazy and cached: pointing at a config whose graph needs a key (e.g. an LLM) doesn't
+ * import that graph until something asks for it, and a *failed* load is not memoized — a transient
+ * error (missing env, a syntax slip) can be retried without a restart.
+ *
+ * @throws {SkeinConfigError} when the file is missing, is not valid JSON, or fails schema validation.
+ *
+ * @example
+ * ```ts
+ * import { loadConfig } from "@skein-js/config";
+ *
+ * const { graphs } = await loadConfig(); // finds ./langgraph.json
+ * const agent = await graphs.load("agent");
+ * ```
+ */
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<SkeinConfig> {
   const cwd = options.cwd ?? process.cwd();
   const configPath = path.resolve(cwd, options.configPath ?? "langgraph.json");

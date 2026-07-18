@@ -7,6 +7,7 @@
 import type { RunEventBus, RunFrame } from "@skein-js/core";
 import { Redis } from "ioredis";
 
+/** Options for {@link RedisRunEventBus} — key namespacing and stream/close-marker retention windows. */
 export interface RedisRunEventBusOptions {
   /** Namespaces every key so multiple apps can share one Redis. Default `"skein"`. */
   keyPrefix?: string;

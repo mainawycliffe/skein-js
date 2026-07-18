@@ -25,6 +25,7 @@ import {
 } from "./drivers.js";
 import { RuntimeConfigError } from "./errors.js";
 
+/** Options for {@link embedPostgresGraphs} — connection strings, semantic search, TTL, and overrides. */
 export interface EmbedPostgresGraphsOptions {
   /** Postgres connection string. Defaults to `process.env.POSTGRES_URI`; throws if neither is set. */
   postgresUri?: string;
@@ -54,6 +55,7 @@ export interface EmbedPostgresGraphsOptions {
   overrides?: Omit<Partial<ProtocolDeps>, "graphs" | "store" | "queue" | "bus" | "checkpointer">;
 }
 
+/** The result of {@link embedPostgresGraphs}: the assembled deps and a `dispose()` for the pools it owns. */
 export interface EmbeddedPostgresRuntime {
   /** Assembled deps for any adapter's `{ deps }` seam. */
   deps: ProtocolDeps;
