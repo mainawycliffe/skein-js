@@ -50,6 +50,32 @@ Graph hot-reload (`reloadGraphs()`) works in every mode; `snapshotState`/`hydrat
 > which uses the in-memory runtime under the hood); `buildRuntime` is the path the CLI uses to add
 > Postgres/Redis.
 
+## In-code embedding (Postgres + Redis)
+
+`buildRuntime` assembles durable deps **from a `langgraph.json`**. `embedPostgresGraphs` assembles the
+same durable deps **from a graph you already hold in code** — the persistent counterpart to
+[`embedInMemoryGraphs`](../server-kit) (which wires only in-memory drivers). Because it owns
+pools/connections, it's `async` and returns a `dispose()`:
+
+```ts
+import { createExpressServer } from "@skein-js/express";
+import { embedPostgresGraphs } from "@skein-js/runtime";
+import { graph } from "./my-graph.js";
+
+const { deps, dispose } = await embedPostgresGraphs({ agent: graph }); // reads POSTGRES_URI / REDIS_URI
+const server = await createExpressServer({ deps });
+await server.listen(2024);
+// …on shutdown:
+await dispose();
+```
+
+Postgres is required (`POSTGRES_URI` or `postgresUri`). **Redis is optional** — with no `redisUri` /
+`REDIS_URI`, the run queue + event bus fall back to in-memory: state survives a restart, but you're
+limited to a **single instance** (the queue is process-local; streaming isn't fanned across instances).
+Options mirror the low-level knobs: `index` (pgvector), `ttl`, `poolMax`, `sslNoVerify`, and `overrides`
+for non-driver deps (`auth`/`logger`/…). See [docs/embedding.md](../../docs/embedding.md) for the full
+walkthrough.
+
 ## Install
 
 ```bash
@@ -62,10 +88,15 @@ TypeScript graphs/embedders requires passing an `importModule` (the CLI injects 
 ## API
 
 - **`buildRuntime(options): Promise<SkeinRuntime>`** — `options`:
-  `{ configPath, store, queue, importModule? }`.
+  `{ configPath, store, queue, importModule? }`. Durable deps **from a `langgraph.json`**.
 - **`interface SkeinRuntime`** — `{ deps, cors?, reloadGraphs(), dispose(), snapshotState?(), hydrateState?() }`
   (the last two only in all-memory mode).
 - **`type StoreDriver`** = `"memory" | "postgres"` · **`type QueueDriver`** = `"memory" | "redis"`.
+- **`embedPostgresGraphs(graphs, options?): Promise<EmbeddedPostgresRuntime>`** — durable deps **from
+  graphs in code** (Postgres + `PostgresSaver`, Redis when configured). Returns `{ deps, dispose() }`.
+  `options`: `{ postgresUri?, redisUri?, index?, ttl?, poolMax?, sslNoVerify?, overrides? }`.
+- **`interface EmbedPostgresGraphsOptions`** · **`interface EmbeddedPostgresRuntime`** ·
+  re-exported **`type EmbeddableGraph`** (from `@skein-js/server-kit`).
 - **`class RuntimeConfigError`** — thrown when a driver's env var or `store.index.embed` can't be
   resolved.
 - **`resolveEmbed(embed, { configDir, importModule? })`** — resolves a `langgraph.json`

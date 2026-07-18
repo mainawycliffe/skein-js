@@ -95,7 +95,7 @@ the [`EmbeddableGraph`](#api-reference) type leaves the graph's generics open on
 const deps = embedInMemoryGraphs({ agent: graph });
 
 // Express — standalone server, or mounted on your existing app:
-await createExpressServer({ deps }).listen(2024);
+await (await createExpressServer({ deps })).listen(2024);
 app.use(skeinRouter({ deps }).router);
 
 // Fastify — plugin under a prefix:
@@ -127,7 +127,51 @@ embedInMemoryGraphs({ agent: graph }, { auth: await loadAuthEngine(/* … */), l
 ## Going to production
 
 The in-memory drivers are ideal for a single long-lived process (dev, tests, a small app). For durable,
-horizontally-scalable state, construct a Postgres store + Redis queue and pass them as `overrides`:
+horizontally-scalable state, use **`embedPostgresGraphs`** — the persistent sibling of
+`embedInMemoryGraphs`. Same graph-in-code call, but it assembles a Postgres store + `PostgresSaver`
+checkpointer and (when a Redis URL is present) a Redis run queue + event bus, reading `POSTGRES_URI` /
+`REDIS_URI` from the environment:
+
+```ts
+import { createExpressServer } from "@skein-js/express";
+import { embedPostgresGraphs } from "@skein-js/runtime";
+import { graph } from "./my-graph.js";
+
+const { deps, dispose } = await embedPostgresGraphs({ agent: graph }); // reads POSTGRES_URI / REDIS_URI
+const server = await createExpressServer({ deps });
+await server.listen(2024);
+
+// It owns pools/connections, so release them on shutdown (embedInMemoryGraphs has nothing to release):
+process.on("SIGTERM", () => dispose().finally(() => process.exit(0)));
+```
+
+> **⚠️ Auth is still off by default — and this is the production path.** Like `embedInMemoryGraphs`,
+> `embedPostgresGraphs` sets no `auth`, so the server **authenticates nothing**. That's easy to miss
+> here precisely because you reach for this helper to _deploy_: shipping it public with no `auth`
+> exposes `/threads`, `/runs`, and `/store` — and running your graph (spending model tokens) — to
+> anyone. Pass an `auth` engine via `overrides` before you go public (see below).
+
+It lives in [`@skein-js/runtime`](../packages/runtime), not `@skein-js/server-kit` — a persistent helper
+pulls in the Postgres/Redis drivers that `server-kit` deliberately avoids. Pass explicit
+`postgresUri` / `redisUri` (and `index` for pgvector, `ttl`, `poolMax`, `sslNoVerify`) instead of env
+vars if you prefer, and `overrides` for `auth` / `logger` / etc. — see the [API reference](#api-reference):
+
+```ts
+import { loadAuthEngine } from "@skein-js/config";
+
+const { deps, dispose } = await embedPostgresGraphs(
+  { agent: graph },
+  { overrides: { auth: await loadAuthEngine(/* … */) } },
+);
+```
+
+> **Redis is optional, but then you're single-instance.** With no `redisUri` / `REDIS_URI`, the run
+> queue + event bus fall back to in-memory: state still survives a restart (it's in Postgres), but the
+> run queue is process-local and streaming isn't fanned across instances, so you **can't run more than
+> one instance**. Set a Redis URL to scale horizontally.
+
+Prefer to assemble the drivers yourself (e.g. a Postgres store with an in-memory queue, or your own
+pool)? Pass them through `embedInMemoryGraphs`' `overrides`:
 
 ```ts
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
@@ -149,10 +193,11 @@ const deps = embedInMemoryGraphs(
 ```
 
 If you _do_ have a `langgraph.json`, [`@skein-js/runtime`](../packages/runtime)'s
-`buildRuntime({ configPath, store: "postgres", queue: "redis" })` assembles all of these for you.
+`buildRuntime({ configPath, store: "postgres", queue: "redis" })` assembles all of these for you —
+`embedPostgresGraphs` is the same assembly for graphs you hold in code.
 
-Serverless/edge deploys need this: the in-memory drivers (and the background run worker) assume one warm
-process, so they don't survive a function that scales to zero. See
+Serverless/edge deploys need durable drivers: the in-memory drivers (and the background run worker) assume
+one warm process, so they don't survive a function that scales to zero. See
 [storage.md](./storage.md) and [runs-and-redis.md](./runs-and-redis.md).
 
 ## The one trade-off: schemas
@@ -187,6 +232,32 @@ type EmbeddableGraph = CompiledGraph<any> | ((config: { configurable?: Record<st
 
 `graphMapToResolver` is useful on its own when you want the resolver but your **own** `ProtocolDeps`
 (e.g. Postgres/Redis drivers): `buildRuntime`-style deps with `graphs: graphMapToResolver({ agent })`.
+`normalizeEmbeddableGraphs(graphs)` accepts either a graph map or a ready `GraphResolver` and returns a
+`GraphResolver` — the same normalization both embed helpers apply.
+
+From [`@skein-js/runtime`](../packages/runtime) (the durable path — see
+[Going to production](#going-to-production)):
+
+```ts
+// Build a durable ProtocolDeps (Postgres store + PostgresSaver, Redis queue/bus when configured) and a
+// dispose() to release the pools/connections it owns. Async, because it connects + migrates on the way up.
+function embedPostgresGraphs(
+  graphs: GraphResolver | Record<string, EmbeddableGraph>,
+  options?: {
+    postgresUri?: string; // default process.env.POSTGRES_URI (required — one of the two)
+    redisUri?: string; //    default process.env.REDIS_URI (absent → in-memory queue/bus, single instance)
+    index?: StoreIndexConfig; // pgvector semantic search (a resolved embedder)
+    ttl?: StoreTtl; //          store-item expiry + background sweep
+    poolMax?: number; //        default env PG_POOL_MAX
+    sslNoVerify?: boolean; //   default env DATABASE_SSL_NO_VERIFY
+    overrides?: Omit<Partial<ProtocolDeps>, "graphs" | "store" | "queue" | "bus" | "checkpointer">;
+  },
+): Promise<{ deps: ProtocolDeps; dispose(): Promise<void> }>;
+```
+
+Unlike `embedInMemoryGraphs` (which returns a plain `ProtocolDeps`), `embedPostgresGraphs` is **async** and
+returns `{ deps, dispose }` — it owns Postgres pools and Redis connections, so you must `dispose()` them on
+shutdown.
 
 ## See also
 

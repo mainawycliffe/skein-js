@@ -3,7 +3,12 @@ import type { GraphResolver, ProtocolDeps } from "@skein-js/agent-protocol";
 import { MemoryRunEventBus, MemoryRunQueue, MemorySkeinStore } from "@skein-js/storage-memory";
 import { describe, expect, it } from "vitest";
 
-import { createInMemoryDeps, embedInMemoryGraphs, graphMapToResolver } from "./in-memory-deps.js";
+import {
+  createInMemoryDeps,
+  embedInMemoryGraphs,
+  graphMapToResolver,
+  normalizeEmbeddableGraphs,
+} from "./in-memory-deps.js";
 
 /** A minimal, real compiled graph — enough to be a valid `ResolvedGraph` map value. */
 function buildGraph() {
@@ -37,6 +42,29 @@ describe("graphMapToResolver", () => {
   it("returns the minimal { graph_id } schema stub", async () => {
     const resolver = graphMapToResolver({ echo: buildGraph() });
     expect(await resolver.schemas("echo")).toEqual({ echo: { graph_id: "echo" } });
+  });
+});
+
+describe("normalizeEmbeddableGraphs", () => {
+  it("turns a graph map into a resolver keyed by the map keys", async () => {
+    const echo = buildGraph();
+    const resolver = normalizeEmbeddableGraphs({ echo });
+    expect(resolver.ids).toEqual(["echo"]);
+    expect(await resolver.load("echo")).toBe(echo);
+  });
+
+  it("passes a ready GraphResolver through untouched", () => {
+    const resolver: GraphResolver = graphMapToResolver({ custom: buildGraph() });
+    expect(normalizeEmbeddableGraphs(resolver)).toBe(resolver);
+  });
+
+  it('treats a graph keyed "ids" as a map, not a resolver (the discriminator holds)', async () => {
+    // A map whose value is a real graph must not be mistaken for a GraphResolver just because it has an
+    // `ids` key — the discriminator checks that `ids` is an array and `load` is a function.
+    const graph = buildGraph();
+    const resolver = normalizeEmbeddableGraphs({ ids: graph });
+    expect(resolver.ids).toEqual(["ids"]);
+    expect(await resolver.load("ids")).toBe(graph);
   });
 });
 

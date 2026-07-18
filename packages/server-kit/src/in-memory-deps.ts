@@ -45,6 +45,18 @@ function isGraphResolver(
 }
 
 /**
+ * Accept either a ready {@link GraphResolver} or a plain graph map and return a `GraphResolver` either
+ * way — the normalization every in-code embedding helper shares (`embedInMemoryGraphs` here,
+ * `embedPostgresGraphs` in `@skein-js/runtime`), so the {@link isGraphResolver} discriminator lives in
+ * exactly one place.
+ */
+export function normalizeEmbeddableGraphs(
+  graphs: GraphResolver | Record<string, EmbeddableGraph>,
+): GraphResolver {
+  return isGraphResolver(graphs) ? graphs : graphMapToResolver(graphs);
+}
+
+/**
  * Turn a map of compiled graphs (or per-config factories) into a {@link GraphResolver}. Keys become the
  * graph ids — one auto-registered assistant each. `schemas()` returns a minimal `{ graph_id }` stub:
  * enough for the assistants introspection endpoints and everything `useStream` / Agent Chat UI render.
@@ -98,7 +110,7 @@ export function embedInMemoryGraphs(
 ): ProtocolDeps {
   return {
     store: new MemorySkeinStore(),
-    graphs: isGraphResolver(graphs) ? graphs : graphMapToResolver(graphs),
+    graphs: normalizeEmbeddableGraphs(graphs),
     queue: new MemoryRunQueue(),
     bus: new MemoryRunEventBus(),
     checkpointer: new MemorySaver(),

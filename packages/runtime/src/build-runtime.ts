@@ -8,7 +8,6 @@
 // reroutable graph resolver so graph hot-reload still works against durable storage.
 
 import { MemorySaver } from "@langchain/langgraph";
-import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import type { GraphResolver, GraphSchemas, ProtocolDeps } from "@skein-js/agent-protocol";
 import {
   loadAuthEngine,
@@ -17,20 +16,24 @@ import {
   type ModuleImporter,
 } from "@skein-js/config";
 import type { GraphSchemas as ConfigGraphSchemas } from "@skein-js/config";
-import { RedisRunEventBus, RedisRunQueue } from "@skein-js/redis";
 import {
   corsFromHttpConfig,
   loadReloadableInMemoryRuntime,
   type DevStateSnapshot,
 } from "@skein-js/server-kit";
 import { MemoryRunEventBus, MemoryRunQueue, MemorySkeinStore } from "@skein-js/storage-memory";
-import {
-  createPostgresPool,
-  PostgresSkeinStore,
-  type StoreIndexConfig,
-} from "@skein-js/storage-postgres";
+import type { StoreIndexConfig } from "@skein-js/storage-postgres";
 import type { CorsOptions } from "cors";
 
+import {
+  connectPostgresStore,
+  connectRedisQueue,
+  postgresConnectionOptions,
+  requireEnv,
+  runDisposers,
+  startStoreTtlSweeper,
+  type Disposer,
+} from "./drivers.js";
 import { RuntimeConfigError } from "./errors.js";
 import { resolveEmbed } from "./resolve-embed.js";
 
@@ -68,35 +71,6 @@ export interface SkeinRuntime {
   snapshotState?(): DevStateSnapshot;
   /** Present only in all-memory mode. */
   hydrateState?(snapshot: DevStateSnapshot): void;
-}
-
-function requireEnv(name: string, driver: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new RuntimeConfigError(`The "${driver}" driver requires ${name} to be set.`);
-  }
-  return value;
-}
-
-/**
- * Optional Postgres connection tuning from the environment — for fitting a managed database's
- * connection cap and its TLS setup. `PG_POOL_MAX` caps the pool size (skein opens a second pool
- * for `PostgresSaver`, so budget for both per instance); `DATABASE_SSL_NO_VERIFY=1|true` disables
- * TLS cert verification for a self-signed managed cert over a public URL.
- */
-function postgresConnectionOptions(): { poolMax?: number; sslNoVerify?: boolean } {
-  const options: { poolMax?: number; sslNoVerify?: boolean } = {};
-  const rawMax = process.env["PG_POOL_MAX"];
-  if (rawMax !== undefined && rawMax.trim() !== "") {
-    const max = Number(rawMax);
-    if (!Number.isInteger(max) || max <= 0) {
-      throw new RuntimeConfigError(`PG_POOL_MAX must be a positive integer (got "${rawMax}").`);
-    }
-    options.poolMax = max;
-  }
-  const noVerify = process.env["DATABASE_SSL_NO_VERIFY"];
-  if (noVerify === "1" || noVerify?.toLowerCase() === "true") options.sslNoVerify = true;
-  return options;
 }
 
 /**
@@ -164,70 +138,39 @@ export async function buildRuntime(options: BuildRuntimeOptions): Promise<SkeinR
   // Track every concrete resource as it is created, so a failure part-way through assembly (a bad
   // migration, a missing REDIS_URI after Postgres already connected) tears down what exists rather
   // than leaking pools/connections. `dispose()` reuses the same list for normal shutdown.
-  const disposers: Array<() => Promise<unknown>> = [];
-  const disposeAll = async (): Promise<void> => {
-    await Promise.allSettled(disposers.map((dispose) => dispose()));
-  };
+  const disposers: Disposer[] = [];
+  const disposeAll = (): Promise<void> => runDisposers(disposers);
 
   try {
     // Store-item TTL from langgraph.json `store.ttl` (snake_case on the wire → camelCase config).
     const storeTtl = resolveStoreTtl(first.config.store?.ttl);
-    const { skeinStore, checkpointer } = await (async () => {
-      if (store === "postgres") {
-        const databaseUrl = requireEnv("POSTGRES_URI", "postgres");
-        const index = await resolveStoreIndex(first.config.store?.index, {
-          configDir: first.configDir,
-          importModule,
-        });
-        // Both pools hit the same POSTGRES_URI, so they must share the same connection tuning —
-        // otherwise the saver would ignore PG_POOL_MAX / DATABASE_SSL_NO_VERIFY and fail TLS (or
-        // blow the connection cap) even when the store connects fine.
-        const connectionOptions = postgresConnectionOptions();
-        const pgStore = await PostgresSkeinStore.connect(databaseUrl, {
-          ...(index ? { index } : {}),
-          ...(storeTtl ? { ttl: storeTtl } : {}),
-          ...connectionOptions,
-        });
-        disposers.push(() => pgStore.close());
-        await pgStore.migrate();
-        // Build the saver on a pool with the same tuning (fromConnString would ignore it).
-        const saver = new PostgresSaver(createPostgresPool(databaseUrl, connectionOptions));
-        disposers.push(() => saver.end());
-        await saver.setup();
-        return { skeinStore: pgStore, checkpointer: saver };
-      }
-      return {
-        skeinStore: new MemorySkeinStore(storeTtl ? { ttl: storeTtl } : undefined),
-        checkpointer: new MemorySaver(),
-      };
-    })();
+    // `requireEnv` is evaluated eagerly (before any connect), so a missing POSTGRES_URI still throws
+    // before a pool is opened. The Postgres store + saver assembly (shared connection tuning, ordered
+    // teardown) lives in `connectPostgresStore` — reused by `embedPostgresGraphs`.
+    const { store: skeinStore, checkpointer } =
+      store === "postgres"
+        ? await connectPostgresStore({
+            url: requireEnv("POSTGRES_URI", "postgres"),
+            index: await resolveStoreIndex(first.config.store?.index, {
+              configDir: first.configDir,
+              importModule,
+            }),
+            ttl: storeTtl,
+            connectionOptions: postgresConnectionOptions(),
+            disposers,
+          })
+        : {
+            store: new MemorySkeinStore(storeTtl ? { ttl: storeTtl } : undefined),
+            checkpointer: new MemorySaver(),
+          };
 
-    // When TTL is configured, sweep expired store items on a background interval (default 60 min).
-    // `unref()` so the timer never keeps the process alive; the disposer stops it on shutdown. The
-    // sweep is caught so a transient DB error is logged, never surfaced as an unhandled rejection that
-    // could take the process down.
-    if (storeTtl) {
-      const everyMs = (storeTtl.sweepIntervalMinutes ?? 60) * 60_000;
-      const sweeper = setInterval(() => {
-        skeinStore.store.sweepExpired().catch((error) => {
-          console.error("skein: store TTL sweep failed", error);
-        });
-      }, everyMs);
-      sweeper.unref();
-      disposers.push(async () => clearInterval(sweeper));
-    }
+    // When TTL is configured, sweep expired store items on a background interval (memory or postgres).
+    if (storeTtl) startStoreTtlSweeper(skeinStore, storeTtl, disposers);
 
-    const { runQueue, bus } = (() => {
-      if (queue === "redis") {
-        const redisUrl = requireEnv("REDIS_URI", "redis");
-        const redisQueue = new RedisRunQueue(redisUrl);
-        disposers.push(() => redisQueue.dispose());
-        const redisBus = new RedisRunEventBus(redisUrl);
-        disposers.push(() => redisBus.dispose());
-        return { runQueue: redisQueue, bus: redisBus };
-      }
-      return { runQueue: new MemoryRunQueue(), bus: new MemoryRunEventBus() };
-    })();
+    const { queue: runQueue, bus } =
+      queue === "redis"
+        ? connectRedisQueue({ url: requireEnv("REDIS_URI", "redis"), disposers })
+        : { queue: new MemoryRunQueue(), bus: new MemoryRunEventBus() };
 
     const deps: ProtocolDeps = {
       store: skeinStore,

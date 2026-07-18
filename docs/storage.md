@@ -151,6 +151,12 @@ await checkpointer.setup(); // idempotent migrations for checkpoint tables
 | `"default"`                     | `PostgresSaver` (Postgres)         |
 | `"custom"`                      | user-supplied checkpointer (later) |
 
+You rarely wire these drivers by hand. [`@skein-js/runtime`](../packages/runtime) assembles the
+`PostgresSkeinStore` + `PostgresSaver` + Redis queue/bus (and their `dispose()`) for you, two ways:
+**`buildRuntime`** from a `langgraph.json` (the `skein dev`/`skein up` path), and
+**`embedPostgresGraphs`** from a graph you hold in code (the durable sibling of `embedInMemoryGraphs` —
+see [embedding.md](./embedding.md#going-to-production)).
+
 ## Why the split matters
 
 Keeping protocol resources (`SkeinStore`) separate from LangGraph checkpoints means:

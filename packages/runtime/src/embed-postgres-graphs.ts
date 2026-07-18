@@ -1,0 +1,154 @@
+// The config-free, durable counterpart to server-kit's `embedInMemoryGraphs`: bring a graph (or a map
+// of them) you already hold in code and get a `ProtocolDeps` backed by Postgres (the store + a
+// `PostgresSaver` checkpointer) and, when a Redis URL is present, a Redis run queue + event bus — a
+// durable, horizontally-scalable deployment in one line, no `langgraph.json` and no CLI. Because it
+// owns pools/connections (unlike the in-memory helper's in-process drivers), it returns a `dispose()`.
+//
+// The concrete driver assembly + ordered teardown is shared with `buildRuntime` via `./drivers.js`;
+// the graph-map/resolver normalization is shared with `embedInMemoryGraphs` via server-kit. See
+// docs/embedding.md.
+
+import type { GraphResolver, ProtocolDeps } from "@skein-js/agent-protocol";
+import { normalizeEmbeddableGraphs, type EmbeddableGraph } from "@skein-js/server-kit";
+import { MemoryRunEventBus, MemoryRunQueue } from "@skein-js/storage-memory";
+import type { StoreIndexConfig } from "@skein-js/storage-postgres";
+
+import {
+  connectPostgresStore,
+  connectRedisQueue,
+  postgresConnectionOptions,
+  requireEnv,
+  runDisposers,
+  startStoreTtlSweeper,
+  type Disposer,
+  type StoreTtl,
+} from "./drivers.js";
+import { RuntimeConfigError } from "./errors.js";
+
+export interface EmbedPostgresGraphsOptions {
+  /** Postgres connection string. Defaults to `process.env.POSTGRES_URI`; throws if neither is set. */
+  postgresUri?: string;
+  /**
+   * Redis connection string. Defaults to `process.env.REDIS_URI`. When **absent**, the run queue and
+   * event bus fall back to in-memory — a single durable instance: state survives a restart, but the
+   * run queue is process-local and streaming is not fanned across instances, so it is **not
+   * horizontally scalable**. Set a Redis URL to run more than one instance.
+   */
+  redisUri?: string;
+  /**
+   * pgvector semantic-search config for the long-term store — a resolved embedder (`dims` + `embed`).
+   * Omitted → store search falls back to naive text matching.
+   */
+  index?: StoreIndexConfig;
+  /** Store-item TTL/expiry policy (with a background sweep). Omitted → items never expire. */
+  ttl?: StoreTtl;
+  /** Max connections per pool (skein opens two — store + saver). Defaults to env `PG_POOL_MAX`. */
+  poolMax?: number;
+  /** Disable TLS cert verification (self-signed managed cert). Defaults to env `DATABASE_SSL_NO_VERIFY`. */
+  sslNoVerify?: boolean;
+  /**
+   * Replace or add any NON-driver dep — `auth`, `logger`, `clock`, `logRunActivity`, `runTimeoutMs`,
+   * `webhookDispatcher`. The drivers (`store`/`queue`/`bus`/`checkpointer`) and `graphs` are owned by
+   * this helper and excluded, so a stray override can't void the durable wiring or the graph source.
+   */
+  overrides?: Omit<Partial<ProtocolDeps>, "graphs" | "store" | "queue" | "bus" | "checkpointer">;
+}
+
+export interface EmbeddedPostgresRuntime {
+  /** Assembled deps for any adapter's `{ deps }` seam. */
+  deps: ProtocolDeps;
+  /** Tear down the Postgres pools + any Redis connections + the TTL sweeper. Call on shutdown. */
+  dispose(): Promise<void>;
+}
+
+/**
+ * Build a durable `ProtocolDeps` around graphs you already hold in code — Postgres store +
+ * `PostgresSaver`, plus Redis queue/bus when a Redis URL is configured — and a `dispose()` to release
+ * the pools/connections it opens. Pass a map of compiled graphs (or factories), or a ready
+ * {@link GraphResolver}; hand the result's `deps` to any adapter's `{ deps }` seam:
+ *
+ * ```ts
+ * import { embedPostgresGraphs } from "@skein-js/runtime";
+ * import { createExpressServer } from "@skein-js/express";
+ *
+ * const { deps, dispose } = await embedPostgresGraphs({ agent: graph }); // reads POSTGRES_URI / REDIS_URI
+ * const server = await createExpressServer({ deps });
+ * await server.listen(2024);
+ * // …on shutdown:
+ * await dispose();
+ * ```
+ *
+ * Postgres is required (`POSTGRES_URI` or `options.postgresUri`). Redis is optional — see
+ * {@link EmbedPostgresGraphsOptions.redisUri} for the single-instance caveat when it's omitted.
+ */
+export async function embedPostgresGraphs(
+  graphs: GraphResolver | Record<string, EmbeddableGraph>,
+  options: EmbedPostgresGraphsOptions = {},
+): Promise<EmbeddedPostgresRuntime> {
+  // Track every concrete resource as it is created, so a failure part-way through assembly tears down
+  // what exists rather than leaking pools/connections. `dispose()` reuses the same list for shutdown.
+  const disposers: Disposer[] = [];
+  const dispose = (): Promise<void> => runDisposers(disposers);
+
+  try {
+    // An explicit poolMax is validated the same way the env path validates PG_POOL_MAX, so a
+    // non-positive value fails loudly here instead of silently producing a broken/hanging pool.
+    if (
+      options.poolMax !== undefined &&
+      (!Number.isInteger(options.poolMax) || options.poolMax <= 0)
+    ) {
+      throw new RuntimeConfigError(`poolMax must be a positive integer (got ${options.poolMax}).`);
+    }
+    // Explicit options win over env-derived tuning; the env is still read + validated (a bad
+    // PG_POOL_MAX throws) so both sources agree, matching `buildRuntime`.
+    const connectionOptions = {
+      ...postgresConnectionOptions(),
+      ...(options.poolMax !== undefined ? { poolMax: options.poolMax } : {}),
+      ...(options.sslNoVerify !== undefined ? { sslNoVerify: options.sslNoVerify } : {}),
+    };
+
+    const { store, checkpointer } = await connectPostgresStore({
+      // A blank explicit URI is treated as "not provided" so it falls through to `requireEnv` and gets
+      // the actionable RuntimeConfigError, rather than an opaque `pg` error from connecting to "".
+      url: blankToUndefined(options.postgresUri) ?? requireEnv("POSTGRES_URI", "postgres"),
+      index: options.index,
+      ttl: options.ttl,
+      connectionOptions,
+      disposers,
+    });
+    if (options.ttl) startStoreTtlSweeper(store, options.ttl, disposers);
+
+    // Redis is optional; a blank URI counts as absent. When it is, warn — a silent downgrade to a
+    // process-local queue is a footgun for a helper people reach for to deploy (see the redisUri doc).
+    const redisUrl =
+      blankToUndefined(options.redisUri) ?? blankToUndefined(process.env["REDIS_URI"]);
+    if (!redisUrl) {
+      console.warn(
+        "skein: embedPostgresGraphs has no Redis URL (redisUri / REDIS_URI) — using an in-memory run " +
+          "queue + event bus. State is durable in Postgres, but this is a single instance: the queue is " +
+          "process-local and streaming isn't fanned across instances. Set a Redis URL to scale out.",
+      );
+    }
+    const { queue, bus } = redisUrl
+      ? connectRedisQueue({ url: redisUrl, disposers })
+      : { queue: new MemoryRunQueue(), bus: new MemoryRunEventBus() };
+
+    const deps: ProtocolDeps = {
+      store,
+      graphs: normalizeEmbeddableGraphs(graphs),
+      queue,
+      bus,
+      checkpointer,
+      ...options.overrides, // spread LAST, mirroring embedInMemoryGraphs
+    };
+    return { deps, dispose };
+  } catch (error) {
+    await dispose();
+    throw error;
+  }
+}
+
+/** Treat an unset or blank/whitespace-only connection string as "not provided". */
+function blankToUndefined(value: string | undefined): string | undefined {
+  return value && value.trim() !== "" ? value : undefined;
+}

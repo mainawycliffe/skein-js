@@ -9,6 +9,13 @@ export type {
   SkeinRuntime,
   StoreDriver,
 } from "./build-runtime.js";
+export { embedPostgresGraphs } from "./embed-postgres-graphs.js";
+export type {
+  EmbedPostgresGraphsOptions,
+  EmbeddedPostgresRuntime,
+} from "./embed-postgres-graphs.js";
+// Re-exported so callers can type their in-code graph map from one package alongside the helper.
+export type { EmbeddableGraph } from "@skein-js/server-kit";
 export { RuntimeConfigError } from "./errors.js";
 export {
   resolveEmbed,
