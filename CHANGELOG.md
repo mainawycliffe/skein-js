@@ -1,3 +1,13 @@
+## 0.8.0 (2026-07-19)
+
+### 🚀 Features
+
+- **agent-protocol:** time travel — fork from a past checkpoint ([9f66405](https://github.com/skein-js/skein-js/commit/9f66405))
+
+### ❤️ Thank You
+
+- Maina Wycliffe
+
 ## 0.7.0 (2026-07-18)
 
 ### 🚀 Features
